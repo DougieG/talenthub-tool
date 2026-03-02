@@ -7,24 +7,26 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { image_base64, image_b64, page_num, file_name, week_ending } = req.body;
-  const imgData = image_base64 || image_b64;
+  const body = req.body;
+  const imgData = body?.image_base64 || body?.image_b64;
 
   if (!imgData) {
-    return res.status(400).json({ error: "Missing image_b64" });
+    return res.status(400).json({ error: "Missing image data" });
   }
 
-  const systemPrompt = `You are an invoice data extraction assistant for TalentHub Workforce Inc., a staffing agency. 
+  const { page_num, file_name, week_ending } = body;
+
+  const systemPrompt = `You are an invoice data extraction assistant for TalentHub Workforce Inc., a staffing agency.
 You extract structured data from scanned invoice pages.
 
 Respond ONLY with a valid JSON object. No markdown, no explanation, no backticks.
 
 Page types:
-- "face": A billing/invoice summary page showing employee names, hours, rates, totals for a job code
+- "face": A billing/invoice summary page showing ONE employee's hours, rate, total for a job code
 - "timesheet": An individual employee timesheet with daily hour breakdown
 - "other": Cover sheets, blank pages, or unrecognized content
 
-For FACE pages, extract:
+For FACE pages, extract (flat structure, one employee per face page):
 {
   "page_type": "face",
   "invoice_no": "...",
@@ -35,23 +37,19 @@ For FACE pages, extract:
   "client_number": "...",
   "attn_to": "...",
   "week_ending": "MM/DD/YYYY",
-  "employees": [
-    {
-      "employee_name": "LAST, FIRST",
-      "week_ending": "MM/DD/YYYY",
-      "assignment": "...",
-      "hours": 40,
-      "bill_rate": 25.00,
-      "pay_rate": 18.00,
-      "line_total": 1000.00,
-      "job_title": "..."
-    }
-  ],
+  "employee_name": "LAST, FIRST",
+  "job_title": "...",
+  "assignment": "Payroll",
+  "hours": 40,
+  "bill_rate": 25.00,
+  "pay_rate": 18.00,
+  "line_total": 1000.00,
   "confidence": {
-    "invoice_no": "high",
-    "invoice_date": "high",
+    "employee_name": "high",
     "job_code": "high",
-    "week_ending": "high"
+    "hours": "high",
+    "bill_rate": "high",
+    "line_total": "high"
   }
 }
 
@@ -64,7 +62,7 @@ For TIMESHEET pages, extract:
   "invoice_no": "...",
   "tsGrid": [
     {"day": "Mon", "start": "9:00AM", "end": "5:00PM", "lunch": "30", "reg": 7.5, "ot": 0, "dt": 0},
-    {"day": "Tue", "start": "9:00AM", "end": "5:00PM", "lunch": "30", "reg": 7.5, "ot": 0, "dt": 0},
+    {"day": "Tue", "start": "", "end": "", "lunch": "", "reg": 0, "ot": 0, "dt": 0},
     {"day": "Wed", "start": "", "end": "", "lunch": "", "reg": 0, "ot": 0, "dt": 0},
     {"day": "Thu", "start": "", "end": "", "lunch": "", "reg": 0, "ot": 0, "dt": 0},
     {"day": "Fri", "start": "", "end": "", "lunch": "", "reg": 0, "ot": 0, "dt": 0},
@@ -73,21 +71,18 @@ For TIMESHEET pages, extract:
   ],
   "confidence": {
     "employee_name": "high",
-    "week_ending": "high",
-    "job_code": "high"
+    "week_ending": "high"
   }
 }
-
-For tsGrid, extract all 7 days Mon-Sun. Use empty string for missing times. Use 0 for missing hours. reg/ot/dt are numeric hours.
 
 For OTHER pages:
 {
   "page_type": "other"
 }
 
-Confidence is "high" if clearly legible, "low" if uncertain, smudged, or inferred.
-For missing fields, use null. For numeric fields (hours, bill_rate, pay_rate, line_total) use numbers not strings.
-If week_ending is not found on the page, use the provided fallback: "${week_ending || ""}".`;
+Confidence: "high" if clearly legible, "low" if uncertain or inferred.
+Missing text fields: use null. Missing numeric fields: use 0.
+If week_ending not found, use: "${week_ending || ""}".`;
 
   try {
     const response = await client.messages.create({
@@ -108,7 +103,7 @@ If week_ending is not found on the page, use the provided fallback: "${week_endi
             },
             {
               type: "text",
-              text: `Extract all invoice data from this page (page ${page_num} of file: ${file_name || "unknown"}). Return only JSON.`,
+              text: `Extract all invoice data from this page (page ${page_num || "?"} of file: ${file_name || "unknown"}). Return only JSON.`,
             },
           ],
         },
@@ -116,19 +111,19 @@ If week_ending is not found on the page, use the provided fallback: "${week_endi
     });
 
     const raw = response.content[0]?.text || "{}";
-    const clean = raw.replace(/```json|```/g, "").trim();
+    const clean = raw.replace(/```json\n?|```/g, "").trim();
 
     let parsed;
     try {
       parsed = JSON.parse(clean);
     } catch (e) {
-      console.error("JSON parse error:", e, "Raw:", raw);
+      console.error("JSON parse error:", e.message, "Raw:", raw.substring(0, 200));
       return res.status(200).json({ page_type: "other", parse_error: true });
     }
 
     return res.status(200).json(parsed);
   } catch (err) {
-    console.error("Anthropic API error:", err);
+    console.error("Anthropic API error:", err.message);
     return res.status(500).json({ error: err.message });
   }
 }
