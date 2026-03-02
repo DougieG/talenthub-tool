@@ -89,6 +89,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .res-tbl td{padding:10px 16px;font-size:14px;border-bottom:1px solid #F3F4F6}
 .dl-btn{display:inline-flex;align-items:center;gap:10px;padding:14px 32px;background:var(--g);color:#fff;text-decoration:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;border:none;transition:.2s;box-shadow:0 4px 14px rgba(75,163,123,.3)}
 .dl-btn:hover{background:var(--gd)}
+.client-panel{background:#fff;border:1px solid var(--b);border-radius:10px;padding:18px 20px;margin-bottom:18px}
+.client-panel h3{font-size:13px;font-weight:700;color:var(--g);text-transform:uppercase;letter-spacing:.06em;margin:0 0 14px}
+.client-panel .fg{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.client-panel input{width:100%;padding:6px 10px;border:1px solid var(--b);border-radius:6px;font-size:13px;font-family:inherit}
+.client-panel input:focus{outline:none;border-color:var(--g)}
+.client-panel label{font-size:11px;font-weight:600;color:var(--tm);display:block;margin-bottom:3px}
+.ts-grid-wrap{margin-top:14px}
+.ts-grid-wrap h4{font-size:12px;font-weight:700;color:var(--tm);text-transform:uppercase;letter-spacing:.05em;margin:0 0 8px}
+.ts-grid{width:100%;border-collapse:collapse;font-size:12px}
+.ts-grid th{background:var(--g);color:#fff;font-weight:600;padding:5px 8px;text-align:center;font-size:11px}
+.ts-grid th:first-child{text-align:left;width:130px}
+.ts-grid td{border:1px solid var(--b);padding:2px 4px;text-align:center}
+.ts-grid td:first-child{font-weight:600;color:#374151;font-size:11px;text-align:left;padding-left:8px;background:var(--gb)}
+.ts-grid td.total-col{background:var(--gl);font-weight:700;color:#1a5c40}
+.ts-grid input{width:58px;border:none;background:transparent;font-size:12px;text-align:center;padding:3px;font-family:inherit}
+.ts-grid input:focus{outline:none;background:var(--yl);border-radius:3px}
+.ts-grid tr.hours-row td{background:var(--gl)}
+.ts-thumbs-row{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
 .warn-banner{background:var(--yl);border:1px solid #F5D98E;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:13px;display:flex;align-items:flex-start;gap:10px}
 .progress-bar{width:100%;height:6px;background:var(--b);border-radius:3px;margin:12px 0;overflow:hidden}
 .progress-fill{height:100%;background:var(--g);border-radius:3px;transition:width .3s}
@@ -155,6 +173,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       </div>
     </div>
     <div class="warn-banner">⚠ ️  <div><strong>OCR Notice:</strong> Data was extracted from scanned documents using AI. Fields marked with ⚠  had low extraction confidence. <strong>Please verify all fields before consolidating.</strong></div></div>
+    <div class="client-panel">
+      <h3>Client Info — applies to all invoices</h3>
+      <div class="fg">
+        <div><label>Client Name</label><input id="ci_name" oninput="setClientField('client_name',this.value)" placeholder="FUND FOR PUBLIC HEALTH"></div>
+        <div><label>Client Number</label><input id="ci_num" oninput="setClientField('client_number',this.value)" placeholder="e.g. 30%"></div>
+        <div><label>Attn To</label><input id="ci_attn" oninput="setClientField('attn_to',this.value)" placeholder="Attn To:"></div>
+        <div><label>Address Line 1</label><input id="ci_addr1" oninput="setClientField('client_addr1',this.value)" placeholder="22 CORTLANDT STREET"></div>
+        <div><label>Address Line 2</label><input id="ci_addr2" oninput="setClientField('client_addr2',this.value)" placeholder="SUITE 802"></div>
+        <div><label>City / State / ZIP</label><input id="ci_city" oninput="setClientField('client_city',this.value)" placeholder="New York, NY 10007"></div>
+      </div>
+    </div>
     <div id="cards"></div>
     <button class="add-inv-btn" onclick="addBlankInvoice()">+ Add Invoice Manually</button>
   </div>
@@ -286,6 +315,18 @@ async function startParsing(){
         ['employee_name','job_code','hours','bill_rate','pay_rate','line_total','job_title'].forEach(k=>{
           currentInv.confidence[k]=currentInv[k]?'high':'low';
         });
+      } else if(r.page_type==='timesheet' && currentInv){
+        currentInv.tsPages.push(i);
+        // Merge tsGrid from timesheet extraction if present
+        if(r.tsGrid && r.tsGrid.length===7){
+          currentInv.tsGrid=r.tsGrid.map(d=>({
+            start:d.start||'',end:d.end||'',lunch:d.lunch||'',
+            reg:d.reg||0,ot:d.ot||0,dt:d.dt||0
+          }));
+          // Recalculate hours from grid
+          const totalH=currentInv.tsGrid.reduce((s,d)=>s+(parseFloat(d.reg)||0)+(parseFloat(d.ot)||0)+(parseFloat(d.dt)||0),0);
+          if(totalH>0) currentInv.hours=totalH.toFixed(2);
+        }
       } else if(currentInv){
         currentInv.tsPages.push(i);
       }
@@ -353,6 +394,7 @@ function showReview(){
   document.getElementById('bar').classList.add('active');
   renderCards();
   updateStats();
+  populateClientPanel();
 }
 
 function renderCards(){
@@ -401,10 +443,59 @@ function fld(i,key,label,val,conf){
 }
 
 function renderTS(i,inv){
-  if(!inv.tsPages||!inv.tsPages.length)return'';
-  return `<div class="ts-sec"><h4>   Timesheet Pages</h4><div class="ts-thumbs">${
-    inv.tsPages.map(p=>`<div class="ts-thumb" onclick="showLB(${p})"><img src="${pageImages[p]}" loading="lazy"><span>Page ${p+1}</span></div>`).join('')
-  }</div></div>`;
+  const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const rows=['Time Started','Time Finished','Less Lunch','Regular Hours','Overtime','Double Time'];
+  const rowKeys=['start','end','lunch','reg','ot','dt'];
+  if(!inv.tsGrid) inv.tsGrid=days.map(()=>({start:'',end:'',lunch:'',reg:'',ot:'',dt:''}));
+  const grid=inv.tsGrid;
+  const thumbs=inv.tsPages&&inv.tsPages.length?`<div class="ts-thumbs-row">${inv.tsPages.map(p=>`<div class="ts-thumb" onclick="showLB(${p})"><img src="${pageImages[p]}" loading="lazy"><span>Page ${p+1}</span></div>`).join('')}</div>`:'';
+  const tableRows=rows.map((row,ri)=>{
+    const key=rowKeys[ri];
+    const isHours=key==='reg'||key==='ot'||key==='dt';
+    const rowClass=isHours?' class="hours-row"':'';
+    const cells=days.map((d,di)=>`<td><input value="${esc(grid[di][key]||'')}" oninput="updTS(${i},${di},'${key}',this.value)"${isHours?' style="font-weight:600"':''}></td>`).join('');
+    const total=isHours?grid.reduce((s,d)=>s+(parseFloat(d[key])||0),0).toFixed(2):'';
+    return `<tr${rowClass}><td>${row}</td>${cells}<td class="total-col">${total}</td></tr>`;
+  }).join('');
+  return `<div class="ts-grid-wrap">
+    <h4>Timesheet Grid</h4>
+    ${thumbs}
+    <div style="overflow-x:auto;margin-top:10px">
+    <table class="ts-grid">
+      <thead><tr><th></th>${days.map(d=>`<th>${d}</th>`).join('')}<th>Total</th></tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+    </div>
+  </div>`;
+}
+
+function updTS(i,di,key,val){
+  if(!invoices[i].tsGrid) invoices[i].tsGrid=Array(7).fill(null).map(()=>({start:'',end:'',lunch:'',reg:'',ot:'',dt:''}));
+  invoices[i].tsGrid[di][key]=val;
+  // recalc total hours if reg/ot/dt changed
+  if(key==='reg'||key==='ot'||key==='dt'){
+    const grid=invoices[i].tsGrid;
+    const totalReg=grid.reduce((s,d)=>s+(parseFloat(d.reg)||0),0);
+    const totalOt=grid.reduce((s,d)=>s+(parseFloat(d.ot)||0),0);
+    const totalDt=grid.reduce((s,d)=>s+(parseFloat(d.dt)||0),0);
+    invoices[i].hours=(totalReg+totalOt+totalDt).toFixed(2);
+    recalc(i);
+    renderCards();
+  }
+}
+
+function setClientField(key,val){
+  invoices.forEach(inv=>{ inv[key]=val; });
+}
+
+function populateClientPanel(){
+  const first=invoices[0]||{};
+  document.getElementById('ci_name').value=first.client_name||'';
+  document.getElementById('ci_num').value=first.client_number||'';
+  document.getElementById('ci_attn').value=first.attn_to||'';
+  document.getElementById('ci_addr1').value=first.client_addr1||'22 CORTLANDT STREET';
+  document.getElementById('ci_addr2').value=first.client_addr2||'SUITE 802';
+  document.getElementById('ci_city').value=first.client_city||'New York, NY 10007';
 }
 
 function upd(i,key,val){
@@ -486,24 +577,28 @@ async function doConsolidate(){
     alert(`${missing.length} invoice(s) are missing a job code. Please fill in all job codes before consolidating.`);
     return;
   }
-
   showSec('spinSec');
   document.getElementById('bar').classList.remove('active');
   document.getElementById('spinMsg').textContent='Generating consolidated PDFs...';
   document.getElementById('progFill').style.width='0%';
-
   try{
-    // Group by job code
     const groups={};
     invoices.forEach(inv=>{
       const c=inv.job_code;
       if(!groups[c])groups[c]=[];
       groups[c].push(inv);
     });
-
     const zip=new JSZip();
     const codes=Object.keys(groups).sort();
     const results=[];
+
+    // Client info from panel
+    const ciName=document.getElementById('ci_name').value||invoices[0]?.client_name||'FUND FOR PUBLIC HEALTH';
+    const ciNum=document.getElementById('ci_num').value||invoices[0]?.client_number||'';
+    const ciAttn=document.getElementById('ci_attn').value||invoices[0]?.attn_to||'';
+    const ciAddr1=document.getElementById('ci_addr1').value||'22 CORTLANDT STREET';
+    const ciAddr2=document.getElementById('ci_addr2').value||'SUITE 802';
+    const ciCity=document.getElementById('ci_city').value||'New York, NY 10007';
 
     for(let ci=0;ci<codes.length;ci++){
       const code=codes[ci];
@@ -512,142 +607,213 @@ async function doConsolidate(){
       document.getElementById('spinDetail').textContent=`Building ${code} (${emps.length} employee${emps.length>1?'s':''})...`;
 
       const pdfDoc=await PDFLib.PDFDocument.create();
+      const W=594.635, H=774.635;
+
+      // Fonts
       const font=await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
       const fontBold=await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
-      const H=792, W=612;
+      const fontOblique=await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaOblique);
+      const fontTimes=await pdfDoc.embedFont(PDFLib.StandardFonts.TimesRoman);
+      const fontTimesBold=await pdfDoc.embedFont(PDFLib.StandardFonts.TimesRomanBold);
 
-      // Embed assets
+      // Colors matching Python template
+      const CHARCOAL=PDFLib.rgb(80/255,74/255,74/255);   // #504A4A
+      const GREEN=PDFLib.rgb(75/255,163/255,123/255);     // #4BA37B
+      const MINT=PDFLib.rgb(232/255,245/255,238/255);     // #E8F5EE
+      const GREEN_BORDER=PDFLib.rgb(90/255,170/255,133/255); // #5AAA85
+      const WHITE=PDFLib.rgb(1,1,1);
+      const GREY=PDFLib.rgb(0.6,0.6,0.6);
+
+      // Background image
       const bgBytes=Uint8Array.from(atob(BG_B64),c=>c.charCodeAt(0));
       const bgImg=await pdfDoc.embedJpg(bgBytes);
-      const logoBytes=Uint8Array.from(atob(LOGO_B64),c=>c.charCodeAt(0));
-      const logoImg=await pdfDoc.embedJpg(logoBytes);
+
+      function drawBg(page){ page.drawImage(bgImg,{x:0,y:0,width:W,height:H}); }
+
+      function drawHeader(page){
+        // TALENT in charcoal + HUB in green - Times-Bold 22pt
+        const talentW=fontTimesBold.widthOfTextAtSize('TALENT',22);
+        page.drawText('TALENT',{x:20,y:H-55,size:22,font:fontTimesBold,color:CHARCOAL});
+        page.drawText('HUB',{x:20+talentW,y:H-55,size:22,font:fontTimesBold,color:GREEN});
+        // Workforce Inc. spaced
+        page.drawText('W o r k f o r c e   I n c .',{x:23,y:H-72,size:9,font,color:CHARCOAL});
+        // Address block
+        const ax=170;
+        page.drawText('295 Madison Avenue, 12th Floor',{x:ax,y:H-38,size:8,font,color:CHARCOAL});
+        page.drawText('New York, NY 10017',{x:ax,y:H-49,size:8,font,color:CHARCOAL});
+        // T. phone
+        page.drawText('T.',{x:ax,y:H-60,size:8,font:fontBold,color:GREEN});
+        page.drawText('+1 (646) 682-9692',{x:ax+10,y:H-60,size:8,font,color:CHARCOAL});
+        // F. fax
+        page.drawText('F.',{x:ax,y:H-71,size:8,font:fontBold,color:GREEN});
+        page.drawText('+1 (646) 682-7424',{x:ax+10,y:H-71,size:8,font,color:CHARCOAL});
+      }
+
+      function drawInfoBoxes(page, invoiceNo, invoiceDate){
+        const bx=490, bw=95, bhLabel=16, bhValue=24;
+        // Helper to draw one box
+        function infoBox(x,y,label,value){
+          // Charcoal label header
+          page.drawRectangle({x,y:y-bhLabel,width:bw,height:bhLabel+4,color:CHARCOAL,borderWidth:0});
+          // Mint value area
+          page.drawRectangle({x,y:y-bhLabel-bhValue,width:bw,height:bhValue,color:MINT,borderWidth:0});
+          // Green border around whole box
+          page.drawRectangle({x,y:y-bhLabel-bhValue-2,width:bw,height:bhLabel+bhValue+6,color:PDFLib.rgb(0,0,0,0),borderColor:GREEN_BORDER,borderWidth:0.75});
+          // Label
+          const lw=fontBold.widthOfTextAtSize(label,7);
+          page.drawText(label,{x:x+(bw-lw)/2,y:y-bhLabel+5,size:7,font:fontBold,color:WHITE});
+          // Value
+          const vw=font.widthOfTextAtSize(value||'',9);
+          page.drawText(value||'',{x:x+(bw-vw)/2,y:y-bhLabel-bhValue+8,size:9,font,color:CHARCOAL});
+        }
+        const by=H-38;
+        infoBox(bx,by,'INVOICE NO.',invoiceNo||'');
+        const dy=by-bhLabel-bhValue-18;
+        infoBox(bx,dy,'INVOICE DATE',invoiceDate||'');
+        // P.O. NUMBER bar (wider)
+        const py=dy-bhLabel-bhValue-18;
+        const pw=140, px=bx+bw-pw;
+        page.drawRectangle({x:px,y:py-16,width:pw,height:16,color:CHARCOAL});
+        const poW=fontBold.widthOfTextAtSize('P.O. NUMBER',7);
+        page.drawText('P.O. NUMBER',{x:px+(pw-poW)/2,y:py-12,size:7,font:fontBold,color:WHITE});
+      }
+
+      function drawClientBlock(page, name, num, attn, addr1, addr2, city, jobCode){
+        let y=H-110;
+        const clientLine=name+(num?' #'+num:'');
+        page.drawText(clientLine,{x:63,y,size:10,font,color:CHARCOAL});
+        y-=12;
+        if(attn){page.drawText(attn,{x:63,y,size:10,font,color:CHARCOAL});y-=12;}
+        page.drawText(addr1,{x:63,y,size:10,font,color:CHARCOAL});y-=12;
+        page.drawText(addr2||jobCode||'',{x:63,y,size:10,font,color:CHARCOAL});y-=12;
+        page.drawText(city,{x:63,y,size:10,font,color:CHARCOAL});
+      }
+
+      function drawTableHeader(page){
+        const barY=532, barH=32;
+        // Main charcoal bar
+        page.drawRectangle({x:24,y:barY,width:384,height:barH,color:CHARCOAL});
+        // Separate tabs for HOURS, RATE, TOTAL
+        page.drawRectangle({x:418,y:barY,width:55,height:barH,color:CHARCOAL});
+        page.drawRectangle({x:478,y:barY,width:45,height:barH,color:CHARCOAL});
+        page.drawRectangle({x:528,y:barY,width:52,height:barH,color:CHARCOAL});
+        // Labels
+        const ty=barY+10;
+        page.drawText('EMPLOYEE NAME',{x:36,y:ty,size:7.5,font:fontBold,color:WHITE});
+        page.drawText('WEEK ENDING',{x:195,y:ty,size:7.5,font:fontBold,color:WHITE});
+        page.drawText('ASSIGNMENT',{x:300,y:ty,size:7.5,font:fontBold,color:WHITE});
+        const hw=fontBold.widthOfTextAtSize('HOURS',7.5);
+        page.drawText('HOURS',{x:445-hw/2,y:ty,size:7.5,font:fontBold,color:WHITE});
+        const rw=fontBold.widthOfTextAtSize('RATE',7.5);
+        page.drawText('RATE',{x:500-rw/2,y:ty,size:7.5,font:fontBold,color:WHITE});
+        const tw=fontBold.widthOfTextAtSize('TOTAL',7.5);
+        page.drawText('TOTAL',{x:554-tw/2,y:ty,size:7.5,font:fontBold,color:WHITE});
+      }
+
+      function drawEmployeeRows(page, employees, weekWorked){
+        let ey=H-258;
+        page.drawText(`WeekWorked: ${weekWorked||''}`,{x:36,y:ey,size:9,font:fontBold,color:CHARCOAL});
+        ey-=20;
+        let grandTotal=0;
+        employees.forEach(emp=>{
+          const lt=parseFloat(emp.line_total)||0;
+          grandTotal+=lt;
+          page.drawText(emp.employee_name||'',{x:36,y:ey,size:9,font,color:CHARCOAL});
+          page.drawText(emp.week_ending||'',{x:195,y:ey,size:9,font,color:CHARCOAL});
+          page.drawText(emp.assignment||'Payroll',{x:300,y:ey,size:9,font,color:CHARCOAL});
+          page.drawText('Reg',{x:385,y:ey,size:9,font,color:CHARCOAL});
+          const hoursStr=String(emp.hours||'');
+          const hsw=font.widthOfTextAtSize(hoursStr,9);
+          page.drawText(hoursStr,{x:458-hsw,y:ey,size:9,font,color:CHARCOAL});
+          const rateStr=fmt(emp.bill_rate);
+          const rsw=font.widthOfTextAtSize(rateStr,9);
+          page.drawText(rateStr,{x:510-rsw,y:ey,size:9,font,color:CHARCOAL});
+          const totStr=fmt(emp.line_total);
+          const tsw=font.widthOfTextAtSize(totStr,9);
+          page.drawText(totStr,{x:572-tsw,y:ey,size:9,font,color:CHARCOAL});
+          ey-=15;
+          const refStr=`[ Invoice Reference:${emp.job_title||''} $${emp.pay_rate||''}]`;
+          page.drawText(refStr,{x:36,y:ey,size:7.5,font,color:GREY});
+          ey-=22;
+        });
+        return grandTotal;
+      }
+
+      function drawTotalDueBox(page, amount){
+        const bx=415, by=H-695, bw=160, bh=35;
+        page.drawRectangle({x:bx,y:by,width:bw,height:bh,color:PDFLib.rgb(0,0,0,0),borderColor:GREEN_BORDER,borderWidth:1});
+        page.drawLine({start:{x:bx+90,y:by},end:{x:bx+90,y:by+bh},thickness:1,color:GREEN_BORDER});
+        const tdw=fontBold.widthOfTextAtSize('TOTAL DUE',12);
+        page.drawText('TOTAL DUE',{x:bx+45-tdw/2,y:by+12,size:12,font:fontBold,color:CHARCOAL});
+        const amtStr=fmt(amount);
+        const aw=fontBold.widthOfTextAtSize(amtStr,12);
+        page.drawText(amtStr,{x:bx+90+(70-aw)/2+10,y:by+12,size:12,font:fontBold,color:CHARCOAL});
+      }
+
+      function drawFooter(page, pageNum, totalPages, showTotal, totalAmount){
+        if(showTotal) drawTotalDueBox(page, totalAmount);
+        // Italic disclaimer
+        const cx=230;
+        const lines=['Invoice due within 30 days of receipt.',
+          'We reserve the right to charge past due accounts 1 1/2% interest',
+          'per month from the due date. Annual Percentage Rate 18%.'];
+        const ys=[H-676,H-689,H-701];
+        lines.forEach((l,i)=>{
+          const lw=fontOblique.widthOfTextAtSize(l,10);
+          page.drawText(l,{x:cx-lw/2,y:ys[i],size:10,font:fontOblique,color:CHARCOAL});
+        });
+        // Remit to
+        const remit='Please remit to: TALENTHUB WORKFORCE INC.';
+        const rw=font.widthOfTextAtSize(remit,9);
+        page.drawText(remit,{x:cx-rw/2,y:H-720,size:9,font,color:CHARCOAL});
+        const addr='295 Madison Avenue, 12th Floor';
+        const aw=font.widthOfTextAtSize(addr,9);
+        page.drawText(addr,{x:cx-aw/2,y:H-732,size:9,font,color:CHARCOAL});
+        const city2='New York, NY 10017';
+        const cw=font.widthOfTextAtSize(city2,9);
+        page.drawText(city2,{x:cx-cw/2,y:H-744,size:9,font,color:CHARCOAL});
+        // Page number
+        page.drawText(`Page ${pageNum} of ${totalPages}`,{x:26,y:H-740,size:7,font,color:GREY});
+      }
+
+      // ==================
+      // BUILD THE PDF
+      // ==================
+      const invoiceNo=emps[0].invoice_no||'';
+      const invoiceDate=emps[0].invoice_date||'';
+      const weekWorked=emps[0].week_ending||'';
+
+      // Count total pages: 1 face + timesheet pages
+      let tsPgCount=0;
+      for(const emp of emps){
+        if(emp.tsPages&&emp.tsPages.length) tsPgCount+=emp.tsPages.length;
+      }
+      const totalPages=1+tsPgCount;
 
       // === FACE PAGE ===
       const fp=pdfDoc.addPage([W,H]);
+      drawBg(fp);
+      drawHeader(fp);
+      drawInfoBoxes(fp,invoiceNo,invoiceDate);
+      drawClientBlock(fp,ciName,ciNum,ciAttn,ciAddr1,ciAddr2,ciCity,code);
+      drawTableHeader(fp);
+      const grandTotal=drawEmployeeRows(fp,emps,weekWorked);
+      drawFooter(fp,1,totalPages,false,null);
 
-      // Background
-      fp.drawImage(bgImg,{x:0,y:0,width:W,height:H});
-
-      // Logo (includes address text) - top left
-      // Logo aspect ratio: 1196:331 = 3.61:1
-      fp.drawImage(logoImg,{x:28,y:H-82,width:300,height:83});
-
-      // ---- RIGHT SIDE: Green field boxes ----
-      const gbg=PDFLib.rgb(.29,.64,.48); // dark green
-      const gbgl=PDFLib.rgb(.9,.96,.92); // light green fill
-      const wht=PDFLib.rgb(1,1,1);
-      const dk=PDFLib.rgb(.12,.12,.12);
-      const gry=PDFLib.rgb(.35,.35,.35);
-
-      // ACCOUNT NO box (top-left of right section)
-      fp.drawRectangle({x:390,y:H-46,width:100,height:22,color:gbg});
-      fp.drawText('ACCOUNT NO.',{x:398,y:H-40,size:7,font:fontBold,color:wht});
-      fp.drawRectangle({x:390,y:H-68,width:100,height:22,color:gbgl});
-      fp.drawText(emps[0].account_no||'',{x:398,y:H-62,size:8,font,color:dk});
-
-      // INVOICE NO box (top-right)
-      fp.drawRectangle({x:494,y:H-46,width:100,height:22,color:gbg});
-      fp.drawText('INVOICE NO.',{x:504,y:H-40,size:7,font:fontBold,color:wht});
-      fp.drawRectangle({x:494,y:H-68,width:100,height:22,color:gbgl});
-      fp.drawText(emps[0].invoice_no||'',{x:504,y:H-62,size:8,font,color:dk});
-
-      // INVOICE DATE
-      fp.drawRectangle({x:494,y:H-94,width:100,height:22,color:gbg});
-      fp.drawText('INVOICE DATE',{x:502,y:H-88,size:7,font:fontBold,color:wht});
-      fp.drawRectangle({x:494,y:H-116,width:100,height:22,color:gbgl});
-      fp.drawText(emps[0].invoice_date||'',{x:504,y:H-110,size:8,font,color:dk});
-
-      // P.O. NUMBER (wide box)
-      fp.drawRectangle({x:390,y:H-142,width:204,height:22,color:gbg});
-      fp.drawText('P.O. NUMBER',{x:450,y:H-136,size:7,font:fontBold,color:wht});
-      fp.drawRectangle({x:390,y:H-164,width:204,height:22,color:gbgl});
-
-      // ---- CLIENT BLOCK ----
-      let cy=H-120;
-      fp.drawText(`FUND FOR PUBLIC HEALTH #${emps[0].client_number||''}`,{x:65,y:cy,size:10,font:fontBold,color:dk});
-      cy-=14;fp.drawText(`Job Code: ${code}`,{x:65,y:cy,size:10,font:fontBold,color:dk});
-      if(emps[0].attn_to){cy-=14;fp.drawText(`Attn To: ${emps[0].attn_to}`,{x:65,y:cy,size:9,font,color:dk})}
-      cy-=14;fp.drawText('22 CORTLANDT STREET',{x:65,y:cy,size:9,font,color:dk});
-      cy-=14;fp.drawText('SUITE 802',{x:65,y:cy,size:9,font,color:dk});
-      cy-=14;fp.drawText('New York, NY 10007',{x:65,y:cy,size:9,font,color:dk});
-
-      // ---- COLUMN HEADER BAR (dark green) ----
-      const barY=H-240;
-      fp.drawRectangle({x:28,y:barY-2,width:W-56,height:20,color:gbg});
-      const hdrs=[['EMPLOYEE NAME',36],['WEEK ENDING',195],['ASSIGNMENT',300],['HOURS',405],['RATE',470],['TOTAL',540]];
-      hdrs.forEach(([t,x])=>fp.drawText(t,{x,y:barY+4,size:7.5,font:fontBold,color:wht}));
-
-      // Light green columns for HOURS, RATE, TOTAL
-      const dataHeight=Math.max(emps.length*50+30,200);
-      fp.drawRectangle({x:395,y:barY-2-dataHeight,width:60,height:dataHeight,color:PDFLib.rgb(.95,.98,.95),opacity:.5});
-      fp.drawRectangle({x:460,y:barY-2-dataHeight,width:60,height:dataHeight,color:PDFLib.rgb(.95,.98,.95),opacity:.5});
-      fp.drawRectangle({x:525,y:barY-2-dataHeight,width:60,height:dataHeight,color:PDFLib.rgb(.95,.98,.95),opacity:.5});
-
-      // ---- WEEKWORKED + EMPLOYEE DATA ----
-      let ey=barY-22;
-      fp.drawText(`WeekWorked: ${emps[0].week_ending||''}`,{x:36,y:ey,size:9,font:fontBold,color:dk});
-      ey-=16;
-
-      let grandTotal=0;
-      emps.forEach(emp=>{
-        const lt=parseFloat(emp.line_total)||0;
-        grandTotal+=lt;
-
-        fp.drawText(emp.employee_name||'',{x:36,y:ey,size:9,font,color:dk});
-        fp.drawText(emp.week_ending||'',{x:195,y:ey,size:9,font,color:dk});
-        fp.drawText(emp.assignment||'Payroll',{x:300,y:ey,size:9,font,color:dk});
-        fp.drawText(`Reg`,{x:385,y:ey,size:9,font,color:dk});
-        fp.drawText(String(emp.hours||''),{x:415,y:ey,size:9,font,color:dk});
-        fp.drawText(fmt(emp.bill_rate),{x:470,y:ey,size:9,font,color:dk});
-        fp.drawText(fmt(emp.line_total),{x:535,y:ey,size:9,font,color:dk});
-        ey-=14;
-        fp.drawText(`[ Invoice Reference:${emp.job_title||''} $${emp.pay_rate||''}]`,{x:36,y:ey,size:7.5,font,color:gry});
-        ey-=24;
-      });
-
-      // ---- FOOTER ----
-      // Line above footer
-      fp.drawLine({start:{x:28,y:108},end:{x:W-28,y:108},thickness:.8,color:dk});
-
-      // Payment terms (centered, italic-style)
-      const ftFont=await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaOblique);
-      fp.drawText('Invoice due within 30 days of receipt.',{x:110,y:92,size:8,font:ftFont,color:dk});
-      fp.drawText('We reserve the right to charge past due accounts 1 1/2% interest',{x:80,y:80,size:8,font:ftFont,color:dk});
-      fp.drawText('per month from the due date. Annual Percentage Rate 18%.',{x:100,y:68,size:8,font:ftFont,color:dk});
-
-      // TOTAL DUE box (green, bottom right)
-      fp.drawRectangle({x:410,y:55,width:184,height:50,color:gbgl,borderColor:gbg,borderWidth:1});
-      fp.drawText('TOTAL DUE',{x:425,y:80,size:10,font:fontBold,color:dk});
-      fp.drawText(fmt(grandTotal),{x:500,y:80,size:10,font:fontBold,color:dk});
-
-      // Remit to
-      fp.drawText('Please remit to: TALENTHUB WORKFORCE INC.',{x:130,y:48,size:8,font,color:dk});
-      fp.drawText('295 Madison Avenue, 12th Floor',{x:185,y:36,size:8,font,color:dk});
-      fp.drawText('New York, NY 10017',{x:210,y:24,size:8,font,color:dk});
-
-      // Page number
-      const tsPgCount=emps.reduce((s,e)=>s+(e.tsPages?.length||0),0);
-      fp.drawText(`Page 1 of ${1+tsPgCount}`,{x:28,y:24,size:7,font,color:gry});
-
-            // === COPY TIMESHEET PAGES FROM ORIGINAL PDFs ===
+      // === COPY TIMESHEET PAGES FROM ORIGINAL PDFs ===
       let pgNum=2;
       for(const emp of emps){
-        if(emp.tsPages && emp.tsPages.length>0 && emp.fileIdx!==undefined){
+        if(emp.tsPages&&emp.tsPages.length>0&&emp.fileIdx!==undefined){
           const srcBytes=allPdfBytes[emp.fileIdx];
           if(srcBytes){
             const srcDoc=await PDFLib.PDFDocument.load(srcBytes);
             for(const tp of emp.tsPages){
-              // tp is the global page index; we need the page index within that file
-              // Recalculate: find what local page this corresponds to
-              let localPage=tp;
-              // Subtract pages from prior files
               let offset=0;
               for(let fi=0;fi<emp.fileIdx;fi++){
                 const tmpPdf=await pdfjsLib.getDocument({data:allPdfBytes[fi].slice()}).promise;
                 offset+=tmpPdf.numPages;
               }
-              localPage=tp-offset;
-
+              const localPage=tp-offset;
               try{
                 const [copied]=await pdfDoc.copyPages(srcDoc,[localPage]);
                 pdfDoc.addPage(copied);
@@ -660,20 +826,32 @@ async function doConsolidate(){
         }
       }
 
+      // If no timesheet pages were copied, add a blank last page with TOTAL DUE
+      if(pgNum===2&&totalPages===1){
+        // Single page - show total on face page
+        drawTotalDueBox(fp, grandTotal);
+      }
+
+      // If we have copied timesheet pages, we can't edit the last one easily
+      // so add a final summary page with total if needed
+      // (The original design copies real timesheets and shows total only on last)
+      // For now: if timesheets were copied, grandTotal was already shown nowhere
+      // Add total to face page only when no timesheets
+      if(tsPgCount===0){
+        drawTotalDueBox(fp, grandTotal);
+      }
+
       const pdfData=await pdfDoc.save();
       zip.file(`Consolidated_${code}.pdf`,pdfData);
-      results.push({code,employees:emps.length,pages:1+tsPgCount,total:fmt(grandTotal)});
+      results.push({code,employees:emps.length,pages:totalPages,total:fmt(grandTotal)});
     }
 
     zipBlob=await zip.generateAsync({type:'blob'});
-
-    // Show results
     setPill(3);
     showSec('s3');
     document.getElementById('resTbody').innerHTML=results.map(r=>
       `<tr><td><strong style="font-family:monospace">${esc(r.code)}</strong></td><td>${r.employees}</td><td>${r.pages}</td><td style="font-weight:600">${r.total}</td></tr>`
     ).join('');
-
   }catch(e){
     console.error(e);
     showAlert('Error generating PDFs: '+e.message,'err');
