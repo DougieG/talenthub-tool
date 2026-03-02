@@ -58,7 +58,7 @@ For TIMESHEET pages, extract:
   "page_type": "timesheet",
   "employee_name": "LAST, FIRST",
   "week_ending": "MM/DD/YYYY",
-  "job_code": "...",
+  "job_code": "...",   // IMPORTANT: Look for alphanumeric codes like N1103187, N1234567. Check boxes labeled JOB CODE, JOB ORDER, P.O. NUMBER, or PURCHASE ORDER. Also check if the job title ends with a code like "Temp Budget Analyst N1103187" - extract "N1103187" as the job_code.
   "invoice_no": "...",
   "tsGrid": [
     {"day": "Mon", "start": "9:00AM", "end": "5:00PM", "lunch": "30", "reg": 7.5, "ot": 0, "dt": 0},
@@ -79,6 +79,12 @@ For OTHER pages:
 {
   "page_type": "other"
 }
+
+CRITICAL - Job Code extraction: TalentHub invoices have a job code that is an alphanumeric string like "N1103187", "N1234567", "H1234567". Look for it in:
+1. A box or field labeled "JOB CODE", "JOB ORDER", "P.O. NUMBER", or "PURCHASE ORDER"
+2. At the end of the job title field (e.g. "Temp Budget Analyst N1103187" -> job_code is "N1103187")
+3. Anywhere on the page that looks like a code starting with a letter followed by 7 digits
+Always extract the job_code - it is never missing from a face page.
 
 Confidence: "high" if clearly legible, "low" if uncertain or inferred.
 Missing text fields: use null. Missing numeric fields: use 0.
