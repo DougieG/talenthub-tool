@@ -574,143 +574,158 @@ function showLB(p){document.getElementById('lbImg').src=pageImages[p];document.g
 async function doConsolidate(){
   const missing=invoices.filter(i=>!i.job_code);
   if(missing.length){
-    alert(`${missing.length} invoice(s) are missing a job code. Please fill in all job codes before consolidating.`);
+    alert(`${missing.length} invoice(s) missing a job code.`);
     return;
   }
   showSec('spinSec');
   document.getElementById('bar').classList.remove('active');
   document.getElementById('spinMsg').textContent='Generating consolidated PDFs...';
   document.getElementById('progFill').style.width='0%';
+  document.getElementById('spinDetail').textContent='';
+
   try{
+    // Group by job code
     const groups={};
     invoices.forEach(inv=>{
-      const c=inv.job_code;
-      if(!groups[c])groups[c]=[];
-      groups[c].push(inv);
+      if(!groups[inv.job_code]) groups[inv.job_code]=[];
+      groups[inv.job_code].push(inv);
     });
-    const zip=new JSZip();
-    const codes=Object.keys(groups).sort();
-    const results=[];
 
     // Client info from panel
     const ciName=document.getElementById('ci_name').value||invoices[0]?.client_name||'FUND FOR PUBLIC HEALTH';
-    const ciNum=document.getElementById('ci_num').value||invoices[0]?.client_number||'';
-    const ciAttn=document.getElementById('ci_attn').value||invoices[0]?.attn_to||'';
+    const ciNum=document.getElementById('ci_num').value||'';
+    const ciAttn=document.getElementById('ci_attn').value||'';
     const ciAddr1=document.getElementById('ci_addr1').value||'22 CORTLANDT STREET';
     const ciAddr2=document.getElementById('ci_addr2').value||'SUITE 802';
     const ciCity=document.getElementById('ci_city').value||'New York, NY 10007';
 
+    const zip=new JSZip();
+    const codes=Object.keys(groups).sort();
+    const results=[];
+
     for(let ci=0;ci<codes.length;ci++){
       const code=codes[ci];
       const emps=groups[code];
-      document.getElementById('progFill').style.width=Math.round(((ci+1)/codes.length)*100)+'%';
-      document.getElementById('spinDetail').textContent=`Building ${code} (${emps.length} employee${emps.length>1?'s':''})...`;
+      document.getElementById('progFill').style.width=Math.round(((ci+1)/codes.length)*90)+'%';
+      document.getElementById('spinDetail').textContent=`Building ${code} (${emps.length} employee${emps.length!==1?'s':''})...`;
 
       const pdfDoc=await PDFLib.PDFDocument.create();
-      const W=594.635, H=774.635;
 
       // Fonts
-      const font=await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
-      const fontBold=await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
-      const fontOblique=await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaOblique);
-      const fontTimes=await pdfDoc.embedFont(PDFLib.StandardFonts.TimesRoman);
-      const fontTimesBold=await pdfDoc.embedFont(PDFLib.StandardFonts.TimesRomanBold);
+      const font      = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+      const fontBold  = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
+      const fontObl   = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaOblique);
+      const fontTB    = await pdfDoc.embedFont(PDFLib.StandardFonts.TimesRomanBold);
 
-      // Colors matching Python template
-      const CHARCOAL=PDFLib.rgb(80/255,74/255,74/255);   // #504A4A
-      const GREEN=PDFLib.rgb(75/255,163/255,123/255);     // #4BA37B
-      const MINT=PDFLib.rgb(232/255,245/255,238/255);     // #E8F5EE
-      const GREEN_BORDER=PDFLib.rgb(90/255,170/255,133/255); // #5AAA85
-      const WHITE=PDFLib.rgb(1,1,1);
-      const GREY=PDFLib.rgb(0.6,0.6,0.6);
+      // Colors — exact from spec
+      const CHARCOAL    = PDFLib.rgb(0x50/255, 0x4A/255, 0x4A/255); // #504A4A
+      const GREEN       = PDFLib.rgb(0x4B/255, 0xA3/255, 0x7B/255); // #4BA37B
+      const MINT        = PDFLib.rgb(0xE8/255, 0xF5/255, 0xEE/255); // #E8F5EE
+      const GBORDER     = PDFLib.rgb(0x5A/255, 0xAA/255, 0x85/255); // #5AAA85
+      const WHITE       = PDFLib.rgb(1,1,1);
+      const GREY        = PDFLib.rgb(0.6,0.6,0.6);
+      const GRIDLINE    = PDFLib.rgb(0xCC/255,0xCC/255,0xCC/255);
 
-      // Background image
+      // Page dimensions from spec
+      const W=594.635, H=774.635;
+
+      // Background
       const bgBytes=Uint8Array.from(atob(BG_B64),c=>c.charCodeAt(0));
       const bgImg=await pdfDoc.embedJpg(bgBytes);
 
-      function drawBg(page){ page.drawImage(bgImg,{x:0,y:0,width:W,height:H}); }
+      // ── HELPERS ──────────────────────────────────────────────
+      function addPage(){
+        const p=pdfDoc.addPage([W,H]);
+        p.drawImage(bgImg,{x:0,y:0,width:W,height:H});
+        return p;
+      }
+
+      function ctr(page,text,cx,y,size,f,color){
+        const w=f.widthOfTextAtSize(text,size);
+        page.drawText(text,{x:cx-w/2,y,size,font:f,color});
+      }
+      function rgt(page,text,rx,y,size,f,color){
+        const w=f.widthOfTextAtSize(text,size);
+        page.drawText(text,{x:rx-w,y,size,font:f,color});
+      }
 
       function drawHeader(page){
-        // TALENT in charcoal + HUB in green - Times-Bold 22pt
-        const talentW=fontTimesBold.widthOfTextAtSize('TALENT',22);
-        page.drawText('TALENT',{x:20,y:H-55,size:22,font:fontTimesBold,color:CHARCOAL});
-        page.drawText('HUB',{x:20+talentW,y:H-55,size:22,font:fontTimesBold,color:GREEN});
-        // Workforce Inc. spaced
+        // TALENT + HUB — Times-Bold 22pt
+        const tw=fontTB.widthOfTextAtSize('TALENT',22);
+        page.drawText('TALENT',{x:20,y:H-55,size:22,font:fontTB,color:CHARCOAL});
+        page.drawText('HUB',   {x:20+tw,y:H-55,size:22,font:fontTB,color:GREEN});
+        // Subtitle
         page.drawText('W o r k f o r c e   I n c .',{x:23,y:H-72,size:9,font,color:CHARCOAL});
-        // Address block
+        // Address block — x=170
         const ax=170;
         page.drawText('295 Madison Avenue, 12th Floor',{x:ax,y:H-38,size:8,font,color:CHARCOAL});
-        page.drawText('New York, NY 10017',{x:ax,y:H-49,size:8,font,color:CHARCOAL});
-        // T. phone
+        page.drawText('New York, NY 10017',            {x:ax,y:H-49,size:8,font,color:CHARCOAL});
         page.drawText('T.',{x:ax,y:H-60,size:8,font:fontBold,color:GREEN});
         page.drawText('+1 (646) 682-9692',{x:ax+10,y:H-60,size:8,font,color:CHARCOAL});
-        // F. fax
         page.drawText('F.',{x:ax,y:H-71,size:8,font:fontBold,color:GREEN});
         page.drawText('+1 (646) 682-7424',{x:ax+10,y:H-71,size:8,font,color:CHARCOAL});
       }
 
       function drawInfoBoxes(page, invoiceNo, invoiceDate){
-        const bx=490, bw=95, bhLabel=16, bhValue=24;
-        // Helper to draw one box
-        function infoBox(x,y,label,value){
-          // Charcoal label header
-          page.drawRectangle({x,y:y-bhLabel,width:bw,height:bhLabel+4,color:CHARCOAL,borderWidth:0});
+        // Spec: bx=490, bw=95, label_h=16, value_h=24
+        const bx=490, bw=95, lh=16, vh=24;
+
+        function infoBox(y, label, value){
+          // Charcoal label bar
+          page.drawRectangle({x:bx, y:y-lh, width:bw, height:lh, color:CHARCOAL});
           // Mint value area
-          page.drawRectangle({x,y:y-bhLabel-bhValue,width:bw,height:bhValue,color:MINT,borderWidth:0});
-          // Green border around whole box
-          page.drawRectangle({x,y:y-bhLabel-bhValue-2,width:bw,height:bhLabel+bhValue+6,color:PDFLib.rgb(0,0,0,0),borderColor:GREEN_BORDER,borderWidth:0.75});
-          // Label
-          const lw=fontBold.widthOfTextAtSize(label,7);
-          page.drawText(label,{x:x+(bw-lw)/2,y:y-bhLabel+5,size:7,font:fontBold,color:WHITE});
-          // Value
-          const vw=font.widthOfTextAtSize(value||'',9);
-          page.drawText(value||'',{x:x+(bw-vw)/2,y:y-bhLabel-bhValue+8,size:9,font,color:CHARCOAL});
+          page.drawRectangle({x:bx, y:y-lh-vh, width:bw, height:vh, color:MINT});
+          // Green border around whole
+          page.drawRectangle({x:bx, y:y-lh-vh-2, width:bw, height:lh+vh+6,
+            borderColor:GBORDER, borderWidth:0.75, color:PDFLib.rgb(0,0,0,0)});
+          // Label (centered)
+          ctr(page, label, bx+bw/2, y-lh+5, 7, fontBold, WHITE);
+          // Value (centered)
+          ctr(page, value||'', bx+bw/2, y-lh-vh+8, 9, font, CHARCOAL);
         }
+
         const by=H-38;
-        infoBox(bx,by,'INVOICE NO.',invoiceNo||'');
-        const dy=by-bhLabel-bhValue-18;
-        infoBox(bx,dy,'INVOICE DATE',invoiceDate||'');
-        // P.O. NUMBER bar (wider)
-        const py=dy-bhLabel-bhValue-18;
+        infoBox(by, 'INVOICE NO.', invoiceNo);
+        const dy=by-lh-vh-18;
+        infoBox(dy, 'INVOICE DATE', invoiceDate);
+        // P.O. NUMBER — wider bar below
+        const py=dy-lh-vh-18;
         const pw=140, px=bx+bw-pw;
-        page.drawRectangle({x:px,y:py-16,width:pw,height:16,color:CHARCOAL});
-        const poW=fontBold.widthOfTextAtSize('P.O. NUMBER',7);
-        page.drawText('P.O. NUMBER',{x:px+(pw-poW)/2,y:py-12,size:7,font:fontBold,color:WHITE});
+        page.drawRectangle({x:px, y:py-16, width:pw, height:16, color:CHARCOAL});
+        ctr(page, 'P.O. NUMBER', px+pw/2, py-12, 7, fontBold, WHITE);
       }
 
       function drawClientBlock(page, name, num, attn, addr1, addr2, city, jobCode){
+        // spec: x=63, start_y=TH_H-110, spacing=12, Helvetica 10pt NOT bold
         let y=H-110;
         const clientLine=name+(num?' #'+num:'');
-        page.drawText(clientLine,{x:63,y,size:10,font,color:CHARCOAL});
-        y-=12;
-        if(attn){page.drawText(attn,{x:63,y,size:10,font,color:CHARCOAL});y-=12;}
-        page.drawText(addr1,{x:63,y,size:10,font,color:CHARCOAL});y-=12;
-        page.drawText(addr2||jobCode||'',{x:63,y,size:10,font,color:CHARCOAL});y-=12;
-        page.drawText(city,{x:63,y,size:10,font,color:CHARCOAL});
+        page.drawText(clientLine,{x:63,y,size:10,font,color:CHARCOAL}); y-=12;
+        if(attn){page.drawText(attn,{x:63,y,size:10,font,color:CHARCOAL}); y-=12;}
+        page.drawText(addr1||'22 CORTLANDT STREET',{x:63,y,size:10,font,color:CHARCOAL}); y-=12;
+        page.drawText(addr2||jobCode||'',          {x:63,y,size:10,font,color:CHARCOAL}); y-=12;
+        page.drawText(city||'New York, NY 10007',  {x:63,y,size:10,font,color:CHARCOAL});
       }
 
       function drawTableHeader(page){
+        // spec: bar_y=532, bar_h=32
         const barY=532, barH=32;
-        // Main charcoal bar
-        page.drawRectangle({x:24,y:barY,width:384,height:barH,color:CHARCOAL});
-        // Separate tabs for HOURS, RATE, TOTAL
-        page.drawRectangle({x:418,y:barY,width:55,height:barH,color:CHARCOAL});
-        page.drawRectangle({x:478,y:barY,width:45,height:barH,color:CHARCOAL});
-        page.drawRectangle({x:528,y:barY,width:52,height:barH,color:CHARCOAL});
-        // Labels
+        // Main bar (EMPLOYEE NAME through ASSIGNMENT)
+        page.drawRectangle({x:24,  y:barY, width:384, height:barH, color:CHARCOAL});
+        // Separate tabs
+        page.drawRectangle({x:418, y:barY, width:55,  height:barH, color:CHARCOAL});
+        page.drawRectangle({x:478, y:barY, width:45,  height:barH, color:CHARCOAL});
+        page.drawRectangle({x:528, y:barY, width:52,  height:barH, color:CHARCOAL});
         const ty=barY+10;
-        page.drawText('EMPLOYEE NAME',{x:36,y:ty,size:7.5,font:fontBold,color:WHITE});
-        page.drawText('WEEK ENDING',{x:195,y:ty,size:7.5,font:fontBold,color:WHITE});
-        page.drawText('ASSIGNMENT',{x:300,y:ty,size:7.5,font:fontBold,color:WHITE});
-        const hw=fontBold.widthOfTextAtSize('HOURS',7.5);
-        page.drawText('HOURS',{x:445-hw/2,y:ty,size:7.5,font:fontBold,color:WHITE});
-        const rw=fontBold.widthOfTextAtSize('RATE',7.5);
-        page.drawText('RATE',{x:500-rw/2,y:ty,size:7.5,font:fontBold,color:WHITE});
-        const tw=fontBold.widthOfTextAtSize('TOTAL',7.5);
-        page.drawText('TOTAL',{x:554-tw/2,y:ty,size:7.5,font:fontBold,color:WHITE});
+        page.drawText('EMPLOYEE NAME',{x:36, y:ty,size:7.5,font:fontBold,color:WHITE});
+        page.drawText('WEEK ENDING',  {x:195,y:ty,size:7.5,font:fontBold,color:WHITE});
+        page.drawText('ASSIGNMENT',   {x:300,y:ty,size:7.5,font:fontBold,color:WHITE});
+        ctr(page,'HOURS',445,ty,7.5,fontBold,WHITE);
+        ctr(page,'RATE', 500,ty,7.5,fontBold,WHITE);
+        ctr(page,'TOTAL',554,ty,7.5,fontBold,WHITE);
       }
 
       function drawEmployeeRows(page, employees, weekWorked){
+        // spec: start_y = TH_H - 258
         let ey=H-258;
         page.drawText(`WeekWorked: ${weekWorked||''}`,{x:36,y:ey,size:9,font:fontBold,color:CHARCOAL});
         ey-=20;
@@ -718,140 +733,121 @@ async function doConsolidate(){
         employees.forEach(emp=>{
           const lt=parseFloat(emp.line_total)||0;
           grandTotal+=lt;
-          page.drawText(emp.employee_name||'',{x:36,y:ey,size:9,font,color:CHARCOAL});
-          page.drawText(emp.week_ending||'',{x:195,y:ey,size:9,font,color:CHARCOAL});
-          page.drawText(emp.assignment||'Payroll',{x:300,y:ey,size:9,font,color:CHARCOAL});
-          page.drawText('Reg',{x:385,y:ey,size:9,font,color:CHARCOAL});
-          const hoursStr=String(emp.hours||'');
-          const hsw=font.widthOfTextAtSize(hoursStr,9);
-          page.drawText(hoursStr,{x:458-hsw,y:ey,size:9,font,color:CHARCOAL});
-          const rateStr=fmt(emp.bill_rate);
-          const rsw=font.widthOfTextAtSize(rateStr,9);
-          page.drawText(rateStr,{x:510-rsw,y:ey,size:9,font,color:CHARCOAL});
-          const totStr=fmt(emp.line_total);
-          const tsw=font.widthOfTextAtSize(totStr,9);
-          page.drawText(totStr,{x:572-tsw,y:ey,size:9,font,color:CHARCOAL});
+          page.drawText(emp.employee_name||'',         {x:36, y:ey,size:9,font,color:CHARCOAL});
+          page.drawText(emp.week_ending||'',           {x:195,y:ey,size:9,font,color:CHARCOAL});
+          page.drawText(emp.assignment||'Payroll',     {x:300,y:ey,size:9,font,color:CHARCOAL});
+          page.drawText('Reg',                         {x:385,y:ey,size:9,font,color:CHARCOAL});
+          rgt(page,String(emp.hours||''),          458,ey,9,font,CHARCOAL);
+          rgt(page,fmt(emp.bill_rate),             510,ey,9,font,CHARCOAL);
+          rgt(page,fmt(emp.line_total),            572,ey,9,font,CHARCOAL);
           ey-=15;
-          const refStr=`[ Invoice Reference:${emp.job_title||''} $${emp.pay_rate||''}]`;
-          page.drawText(refStr,{x:36,y:ey,size:7.5,font,color:GREY});
+          const ref=`[ Invoice Reference:${emp.job_title||''} $${emp.pay_rate||''}]`;
+          page.drawText(ref,{x:36,y:ey,size:7.5,font,color:GREY});
           ey-=22;
         });
         return grandTotal;
       }
 
       function drawTotalDueBox(page, amount){
+        // spec: x=415, y=TH_H-695, w=160, h=35, divider at +90
         const bx=415, by=H-695, bw=160, bh=35;
-        page.drawRectangle({x:bx,y:by,width:bw,height:bh,color:PDFLib.rgb(0,0,0,0),borderColor:GREEN_BORDER,borderWidth:1});
-        page.drawLine({start:{x:bx+90,y:by},end:{x:bx+90,y:by+bh},thickness:1,color:GREEN_BORDER});
-        const tdw=fontBold.widthOfTextAtSize('TOTAL DUE',12);
-        page.drawText('TOTAL DUE',{x:bx+45-tdw/2,y:by+12,size:12,font:fontBold,color:CHARCOAL});
-        const amtStr=fmt(amount);
-        const aw=fontBold.widthOfTextAtSize(amtStr,12);
-        page.drawText(amtStr,{x:bx+90+(70-aw)/2+10,y:by+12,size:12,font:fontBold,color:CHARCOAL});
+        page.drawRectangle({x:bx,y:by,width:bw,height:bh,
+          borderColor:GBORDER,borderWidth:1,color:PDFLib.rgb(0,0,0,0)});
+        page.drawLine({start:{x:bx+90,y:by},end:{x:bx+90,y:by+bh},thickness:1,color:GBORDER});
+        ctr(page,'TOTAL DUE', bx+45,    by+12, 12, fontBold, CHARCOAL);
+        ctr(page,fmt(amount), bx+90+35, by+12, 12, fontBold, CHARCOAL);
       }
 
       function drawFooter(page, pageNum, totalPages, showTotal, totalAmount){
         if(showTotal) drawTotalDueBox(page, totalAmount);
-        // Italic disclaimer
+        // Italic disclaimer — centered at x=230
         const cx=230;
-        const lines=['Invoice due within 30 days of receipt.',
+        const disc=[
+          'Invoice due within 30 days of receipt.',
           'We reserve the right to charge past due accounts 1 1/2% interest',
-          'per month from the due date. Annual Percentage Rate 18%.'];
-        const ys=[H-676,H-689,H-701];
-        lines.forEach((l,i)=>{
-          const lw=fontOblique.widthOfTextAtSize(l,10);
-          page.drawText(l,{x:cx-lw/2,y:ys[i],size:10,font:fontOblique,color:CHARCOAL});
-        });
-        // Remit to
-        const remit='Please remit to: TALENTHUB WORKFORCE INC.';
-        const rw=font.widthOfTextAtSize(remit,9);
-        page.drawText(remit,{x:cx-rw/2,y:H-720,size:9,font,color:CHARCOAL});
-        const addr='295 Madison Avenue, 12th Floor';
-        const aw=font.widthOfTextAtSize(addr,9);
-        page.drawText(addr,{x:cx-aw/2,y:H-732,size:9,font,color:CHARCOAL});
-        const city2='New York, NY 10017';
-        const cw=font.widthOfTextAtSize(city2,9);
-        page.drawText(city2,{x:cx-cw/2,y:H-744,size:9,font,color:CHARCOAL});
-        // Page number
+          'per month from the due date. Annual Percentage Rate 18%.'
+        ];
+        [H-676,H-689,H-701].forEach((y,i)=>ctr(page,disc[i],cx,y,10,fontObl,CHARCOAL));
+        ctr(page,'Please remit to: TALENTHUB WORKFORCE INC.',cx,H-720,9,font,CHARCOAL);
+        ctr(page,'295 Madison Avenue, 12th Floor',           cx,H-732,9,font,CHARCOAL);
+        ctr(page,'New York, NY 10017',                       cx,H-744,9,font,CHARCOAL);
+        // Page number — spec: xy=[26, TH_H-740]
         page.drawText(`Page ${pageNum} of ${totalPages}`,{x:26,y:H-740,size:7,font,color:GREY});
       }
 
-      // ==================
-      // BUILD THE PDF
-      // ==================
-      const invoiceNo=emps[0].invoice_no||'';
-      const invoiceDate=emps[0].invoice_date||'';
-      const weekWorked=emps[0].week_ending||'';
+      // ── BUILD PDF ─────────────────────────────────────────────
+      const invoiceNo   = emps[0].invoice_no   || '';
+      const invoiceDate = emps[0].invoice_date || '';
+      const weekWorked  = emps[0].week_ending  || '';
 
-      // Count total pages: 1 face + timesheet pages
+      // Count timesheet pages
       let tsPgCount=0;
-      for(const emp of emps){
-        if(emp.tsPages&&emp.tsPages.length) tsPgCount+=emp.tsPages.length;
-      }
+      emps.forEach(e=>{ if(e.tsPages) tsPgCount+=e.tsPages.length; });
       const totalPages=1+tsPgCount;
 
       // === FACE PAGE ===
-      const fp=pdfDoc.addPage([W,H]);
-      drawBg(fp);
+      const fp=addPage();
       drawHeader(fp);
-      drawInfoBoxes(fp,invoiceNo,invoiceDate);
-      drawClientBlock(fp,ciName,ciNum,ciAttn,ciAddr1,ciAddr2,ciCity,code);
+      drawInfoBoxes(fp, invoiceNo, invoiceDate);
+      drawClientBlock(fp, ciName, ciNum, ciAttn, ciAddr1, ciAddr2, ciCity, code);
       drawTableHeader(fp);
-      const grandTotal=drawEmployeeRows(fp,emps,weekWorked);
-      drawFooter(fp,1,totalPages,false,null);
+      const grandTotal=drawEmployeeRows(fp, emps, weekWorked);
+      // TOTAL DUE only on last page — if no timesheets, face IS last page
+      const faceIsLast=(tsPgCount===0);
+      drawFooter(fp, 1, totalPages, faceIsLast, faceIsLast?grandTotal:null);
 
-      // === COPY TIMESHEET PAGES FROM ORIGINAL PDFs ===
+      // === COPY ORIGINAL TIMESHEET PAGES ===
       let pgNum=2;
       for(const emp of emps){
-        if(emp.tsPages&&emp.tsPages.length>0&&emp.fileIdx!==undefined){
-          const srcBytes=allPdfBytes[emp.fileIdx];
-          if(srcBytes){
-            const srcDoc=await PDFLib.PDFDocument.load(srcBytes);
-            for(const tp of emp.tsPages){
-              let offset=0;
-              for(let fi=0;fi<emp.fileIdx;fi++){
-                const tmpPdf=await pdfjsLib.getDocument({data:allPdfBytes[fi].slice()}).promise;
-                offset+=tmpPdf.numPages;
-              }
-              const localPage=tp-offset;
-              try{
-                const [copied]=await pdfDoc.copyPages(srcDoc,[localPage]);
-                pdfDoc.addPage(copied);
-                pgNum++;
-              }catch(e){
-                console.warn('Could not copy page',tp,e);
-              }
-            }
+        if(!emp.tsPages||!emp.tsPages.length||emp.fileIdx===undefined) continue;
+        const srcBytes=allPdfBytes[emp.fileIdx];
+        if(!srcBytes) continue;
+        const srcDoc=await PDFLib.PDFDocument.load(srcBytes);
+        for(const tp of emp.tsPages){
+          let offset=0;
+          for(let fi=0;fi<emp.fileIdx;fi++){
+            const tmp=await pdfjsLib.getDocument({data:allPdfBytes[fi].slice()}).promise;
+            offset+=tmp.numPages;
           }
+          const localPage=tp-offset;
+          try{
+            const [copied]=await pdfDoc.copyPages(srcDoc,[localPage]);
+            const isLastPage=(pgNum===totalPages);
+            if(isLastPage){
+              // We can't draw on copied pages easily — attach total to face instead
+              // so draw total on face page retroactively by adding a new page
+            }
+            pdfDoc.addPage(copied);
+            pgNum++;
+          }catch(e){ console.warn('Could not copy page',tp,e); }
         }
       }
 
-      // If no timesheet pages were copied, add a blank last page with TOTAL DUE
-      if(pgNum===2&&totalPages===1){
-        // Single page - show total on face page
-        drawTotalDueBox(fp, grandTotal);
-      }
-
-      // If we have copied timesheet pages, we can't edit the last one easily
-      // so add a final summary page with total if needed
-      // (The original design copies real timesheets and shows total only on last)
-      // For now: if timesheets were copied, grandTotal was already shown nowhere
-      // Add total to face page only when no timesheets
-      if(tsPgCount===0){
-        drawTotalDueBox(fp, grandTotal);
+      // If timesheets exist, grand total goes on last page.
+      // Since copied pages can't be edited, add a simple final total page.
+      if(tsPgCount>0){
+        const lp=addPage();
+        drawHeader(lp);
+        drawInfoBoxes(lp, invoiceNo, invoiceDate);
+        drawClientBlock(lp, ciName, ciNum, ciAttn, ciAddr1, ciAddr2, ciCity, code);
+        drawTableHeader(lp);
+        drawEmployeeRows(lp, emps, weekWorked);
+        drawFooter(lp, totalPages+1, totalPages+1, true, grandTotal);
       }
 
       const pdfData=await pdfDoc.save();
-      zip.file(`Consolidated_${code}.pdf`,pdfData);
-      results.push({code,employees:emps.length,pages:totalPages,total:fmt(grandTotal)});
+      zip.file(`Consolidated_${code}.pdf`, pdfData);
+      results.push({code, employees:emps.length, pages:totalPages, total:fmt(grandTotal)});
     }
 
+    document.getElementById('progFill').style.width='100%';
     zipBlob=await zip.generateAsync({type:'blob'});
     setPill(3);
     showSec('s3');
     document.getElementById('resTbody').innerHTML=results.map(r=>
       `<tr><td><strong style="font-family:monospace">${esc(r.code)}</strong></td><td>${r.employees}</td><td>${r.pages}</td><td style="font-weight:600">${r.total}</td></tr>`
     ).join('');
+
   }catch(e){
     console.error(e);
     showAlert('Error generating PDFs: '+e.message,'err');
