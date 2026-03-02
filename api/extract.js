@@ -7,9 +7,10 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { image_b64, page_num, file_name, week_ending } = req.body;
+  const { image_base64, image_b64, page_num, file_name, week_ending } = req.body;
+  const imgData = image_base64 || image_b64;
 
-  if (!image_b64) {
+  if (!imgData) {
     return res.status(400).json({ error: "Missing image_b64" });
   }
 
@@ -61,12 +62,23 @@ For TIMESHEET pages, extract:
   "week_ending": "MM/DD/YYYY",
   "job_code": "...",
   "invoice_no": "...",
+  "tsGrid": [
+    {"day": "Mon", "start": "9:00AM", "end": "5:00PM", "lunch": "30", "reg": 7.5, "ot": 0, "dt": 0},
+    {"day": "Tue", "start": "9:00AM", "end": "5:00PM", "lunch": "30", "reg": 7.5, "ot": 0, "dt": 0},
+    {"day": "Wed", "start": "", "end": "", "lunch": "", "reg": 0, "ot": 0, "dt": 0},
+    {"day": "Thu", "start": "", "end": "", "lunch": "", "reg": 0, "ot": 0, "dt": 0},
+    {"day": "Fri", "start": "", "end": "", "lunch": "", "reg": 0, "ot": 0, "dt": 0},
+    {"day": "Sat", "start": "", "end": "", "lunch": "", "reg": 0, "ot": 0, "dt": 0},
+    {"day": "Sun", "start": "", "end": "", "lunch": "", "reg": 0, "ot": 0, "dt": 0}
+  ],
   "confidence": {
     "employee_name": "high",
     "week_ending": "high",
     "job_code": "high"
   }
 }
+
+For tsGrid, extract all 7 days Mon-Sun. Use empty string for missing times. Use 0 for missing hours. reg/ot/dt are numeric hours.
 
 For OTHER pages:
 {
@@ -91,7 +103,7 @@ If week_ending is not found on the page, use the provided fallback: "${week_endi
               source: {
                 type: "base64",
                 media_type: "image/jpeg",
-                data: image_b64,
+                data: imgData,
               },
             },
             {
