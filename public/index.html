@@ -180,7 +180,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         <div><label>Client Number</label><input id="ci_num" oninput="setClientField('client_number',this.value)" placeholder="e.g. 30%"></div>
         <div><label>Attn To</label><input id="ci_attn" oninput="setClientField('attn_to',this.value)" placeholder="Attn To:"></div>
         <div><label>Address Line 1</label><input id="ci_addr1" oninput="setClientField('client_addr1',this.value)" placeholder="22 CORTLANDT STREET"></div>
-        <div><label>Address Line 2</label><input id="ci_addr2" oninput="setClientField('client_addr2',this.value)" placeholder="SUITE 802"></div>
+        <div><label>Address Line 2</label><input id="ci_addr2" oninput="setClientField('client_addr2',this.value)" placeholder="(Job code replaces this line)"></div>
         <div><label>City / State / ZIP</label><input id="ci_city" oninput="setClientField('client_city',this.value)" placeholder="New York, NY 10007"></div>
       </div>
     </div>
@@ -472,7 +472,7 @@ function renderTS(i,inv){
 function updTS(i,di,key,val){
   if(!invoices[i].tsGrid) invoices[i].tsGrid=Array(7).fill(null).map(()=>({start:'',end:'',lunch:'',reg:'',ot:'',dt:''}));
   invoices[i].tsGrid[di][key]=val;
-  // recalc total hours if reg/ot/dt changed
+  // recalc total hours if reg/ot/dt changed — update totals in-place without re-rendering
   if(key==='reg'||key==='ot'||key==='dt'){
     const grid=invoices[i].tsGrid;
     const totalReg=grid.reduce((s,d)=>s+(parseFloat(d.reg)||0),0);
@@ -480,7 +480,27 @@ function updTS(i,di,key,val){
     const totalDt=grid.reduce((s,d)=>s+(parseFloat(d.dt)||0),0);
     invoices[i].hours=(totalReg+totalOt+totalDt).toFixed(2);
     recalc(i);
-    renderCards();
+    // Update total column cells in-place instead of re-rendering all cards
+    const card=document.getElementById('c'+i);
+    if(card){
+      const tsGrid=card.querySelector('.ts-grid');
+      if(tsGrid){
+        const rows=tsGrid.querySelectorAll('tbody tr');
+        const hourKeys=['reg','ot','dt'];
+        rows.forEach(row=>{
+          const cells=row.querySelectorAll('td');
+          const label=cells[0]?.textContent?.trim();
+          let hk=null;
+          if(label==='Regular Hours')hk='reg';
+          else if(label==='Overtime')hk='ot';
+          else if(label==='Double Time')hk='dt';
+          if(hk){
+            const totalCell=cells[cells.length-1];
+            if(totalCell)totalCell.textContent=grid.reduce((s,d)=>s+(parseFloat(d[hk])||0),0).toFixed(2);
+          }
+        });
+      }
+    }
   }
 }
 
@@ -494,7 +514,7 @@ function populateClientPanel(){
   document.getElementById('ci_num').value=first.client_number||'';
   document.getElementById('ci_attn').value=first.attn_to||'';
   document.getElementById('ci_addr1').value=first.client_addr1||'22 CORTLANDT STREET';
-  document.getElementById('ci_addr2').value=first.client_addr2||'SUITE 802';
+  document.getElementById('ci_addr2').value=first.client_addr2||'';
   document.getElementById('ci_city').value=first.client_city||'New York, NY 10007';
 }
 
@@ -596,7 +616,7 @@ async function doConsolidate(){
     const ciNum=document.getElementById('ci_num').value||'';
     const ciAttn=document.getElementById('ci_attn').value||'';
     const ciAddr1=document.getElementById('ci_addr1').value||'22 CORTLANDT STREET';
-    const ciAddr2=document.getElementById('ci_addr2').value||'SUITE 802';
+    const ciAddr2=document.getElementById('ci_addr2').value||'';
     const ciCity=document.getElementById('ci_city').value||'New York, NY 10007';
 
     const zip=new JSZip();
@@ -677,7 +697,7 @@ async function doConsolidate(){
           page.drawRectangle({x:bx, y:y-lh-vh, width:bw, height:vh, color:MINT});
           // Green border around whole
           page.drawRectangle({x:bx, y:y-lh-vh-2, width:bw, height:lh+vh+6,
-            borderColor:GBORDER, borderWidth:0.75, color:PDFLib.rgb(0,0,0,0)});
+            borderColor:GBORDER, borderWidth:0.75});
           // Label (centered)
           ctr(page, label, bx+bw/2, y-lh+5, 7, fontBold, WHITE);
           // Value (centered)
@@ -688,21 +708,31 @@ async function doConsolidate(){
         infoBox(by, 'INVOICE NO.', invoiceNo);
         const dy=by-lh-vh-18;
         infoBox(dy, 'INVOICE DATE', invoiceDate);
-        // P.O. NUMBER — wider bar below
+        // P.O. NUMBER — wider box below with mint value area (matches reference)
         const py=dy-lh-vh-18;
         const pw=140, px=bx+bw-pw;
+        const pvh=30; // taller value area for P.O. NUMBER
         page.drawRectangle({x:px, y:py-16, width:pw, height:16, color:CHARCOAL});
+        page.drawRectangle({x:px, y:py-16-pvh, width:pw, height:pvh, color:MINT});
+        page.drawRectangle({x:px, y:py-16-pvh-2, width:pw, height:16+pvh+6,
+          borderColor:GBORDER, borderWidth:0.75});
         ctr(page, 'P.O. NUMBER', px+pw/2, py-12, 7, fontBold, WHITE);
       }
 
       function drawClientBlock(page, name, num, attn, addr1, addr2, city, jobCode){
         // spec: x=63, start_y=TH_H-110, spacing=12, Helvetica 10pt NOT bold
+        // Reference layout: Client Name, Attn To, Address, Job Code (replaces suite), City
         let y=H-110;
-        const clientLine=name+(num?' #'+num:'');
-        page.drawText(clientLine,{x:63,y,size:10,font,color:CHARCOAL}); y-=12;
-        if(attn){page.drawText(attn,{x:63,y,size:10,font,color:CHARCOAL}); y-=12;}
+        // Client name — NO "#" character, format: "FUND FOR PUBLIC HEALTH"
+        page.drawText(name||'',{x:63,y,size:10,font,color:CHARCOAL}); y-=12;
+        // Attn To line — includes client number if present
+        const attnLine=num?'Attn To: '+num:(attn||'');
+        if(attnLine){page.drawText(attnLine,{x:63,y,size:10,font,color:CHARCOAL}); y-=12;}
+        // Address line 1
         page.drawText(addr1||'22 CORTLANDT STREET',{x:63,y,size:10,font,color:CHARCOAL}); y-=12;
-        page.drawText(addr2||jobCode||'',          {x:63,y,size:10,font,color:CHARCOAL}); y-=12;
+        // Job code on its own line (replaces SUITE 802) — always show job code here
+        if(jobCode){page.drawText(jobCode,{x:63,y,size:10,font,color:CHARCOAL}); y-=12;}
+        // City/State/ZIP
         page.drawText(city||'New York, NY 10007',  {x:63,y,size:10,font,color:CHARCOAL});
       }
 
@@ -752,7 +782,7 @@ async function doConsolidate(){
         // spec: x=415, y=TH_H-695, w=160, h=35, divider at +90
         const bx=415, by=H-695, bw=160, bh=35;
         page.drawRectangle({x:bx,y:by,width:bw,height:bh,
-          borderColor:GBORDER,borderWidth:1,color:PDFLib.rgb(0,0,0,0)});
+          borderColor:GBORDER,borderWidth:1});
         page.drawLine({start:{x:bx+90,y:by},end:{x:bx+90,y:by+bh},thickness:1,color:GBORDER});
         ctr(page,'TOTAL DUE', bx+45,    by+12, 12, fontBold, CHARCOAL);
         ctr(page,fmt(amount), bx+90+35, by+12, 12, fontBold, CHARCOAL);
@@ -780,9 +810,10 @@ async function doConsolidate(){
       const invoiceDate = emps[0].invoice_date || '';
       const weekWorked  = emps[0].week_ending  || '';
 
-      // Count timesheet pages
-      let tsPgCount=0;
-      emps.forEach(e=>{ if(e.tsPages) tsPgCount+=e.tsPages.length; });
+      // Count timesheet pages: 2 employee timesheets fit per page (from gold standard)
+      // Every employee gets a timesheet block rendered (even with empty grid)
+      const empsWithTS=emps;
+      const tsPgCount=empsWithTS.length>0?Math.ceil(empsWithTS.length/2):0;
       const totalPages=1+tsPgCount;
 
       // === FACE PAGE ===
@@ -792,47 +823,116 @@ async function doConsolidate(){
       drawClientBlock(fp, ciName, ciNum, ciAttn, ciAddr1, ciAddr2, ciCity, code);
       drawTableHeader(fp);
       const grandTotal=drawEmployeeRows(fp, emps, weekWorked);
-      // TOTAL DUE only on last page — if no timesheets, face IS last page
+      // TOTAL DUE only on the very last page
       const faceIsLast=(tsPgCount===0);
       drawFooter(fp, 1, totalPages, faceIsLast, faceIsLast?grandTotal:null);
 
-      // === COPY ORIGINAL TIMESHEET PAGES ===
-      let pgNum=2;
-      for(const emp of emps){
-        if(!emp.tsPages||!emp.tsPages.length||emp.fileIdx===undefined) continue;
-        const srcBytes=allPdfBytes[emp.fileIdx];
-        if(!srcBytes) continue;
-        const srcDoc=await PDFLib.PDFDocument.load(srcBytes);
-        for(const tp of emp.tsPages){
-          let offset=0;
-          for(let fi=0;fi<emp.fileIdx;fi++){
-            const tmp=await pdfjsLib.getDocument({data:allPdfBytes[fi].slice()}).promise;
-            offset+=tmp.numPages;
+      // === RENDER TIMESHEET PAGES FROM SCRATCH ===
+      // Each page has same header/client/info boxes + table header + up to 2 employee timesheets
+      // Matches gold standard layout from 3-reference-kalyn-originals
+      if(empsWithTS.length>0){
+        for(let tpi=0;tpi<empsWithTS.length;tpi+=2){
+          const pageNum=Math.floor(tpi/2)+2;
+          const isLastPage=(pageNum===totalPages);
+          const tp=addPage();
+          drawHeader(tp);
+          drawInfoBoxes(tp, invoiceNo, invoiceDate);
+          drawClientBlock(tp, ciName, ciNum, ciAttn, ciAddr1, ciAddr2, ciCity, code);
+          drawTableHeader(tp);
+
+          // Title
+          tp.drawText('Employee Timesheet Adjustment',{x:36,y:H-258,size:10,font:fontBold,color:CHARCOAL});
+
+          // Draw up to 2 employee timesheet grids on this page
+          let curY=H-280;
+          for(let ei=0;ei<2&&(tpi+ei)<empsWithTS.length;ei++){
+            const emp=empsWithTS[tpi+ei];
+            curY=drawTimesheetBlock(tp, emp, curY, ciName);
+            curY-=20; // spacing between blocks
           }
-          const localPage=tp-offset;
-          try{
-            const [copied]=await pdfDoc.copyPages(srcDoc,[localPage]);
-            const isLastPage=(pgNum===totalPages);
-            if(isLastPage){
-              // We can't draw on copied pages easily — attach total to face instead
-              // so draw total on face page retroactively by adding a new page
-            }
-            pdfDoc.addPage(copied);
-            pgNum++;
-          }catch(e){ console.warn('Could not copy page',tp,e); }
+
+          drawFooter(tp, pageNum, totalPages, isLastPage, isLastPage?grandTotal:null);
         }
       }
 
-      // If timesheets exist, grand total goes on last page.
-      // Since copied pages can't be edited, add a simple final total page.
-      if(tsPgCount>0){
-        const lp=addPage();
-        drawHeader(lp);
-        drawInfoBoxes(lp, invoiceNo, invoiceDate);
-        drawClientBlock(lp, ciName, ciNum, ciAttn, ciAddr1, ciAddr2, ciCity, code);
-        drawTableHeader(lp);
-        drawEmployeeRows(lp, emps, weekWorked);
-        drawFooter(lp, totalPages+1, totalPages+1, true, grandTotal);
+      // ── TIMESHEET BLOCK RENDERER ──────────────────────────────
+      // Draws one employee's timesheet grid matching gold standard layout
+      function drawTimesheetBlock(page, emp, startY, clientName){
+        const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+        const grid=emp.tsGrid||days.map(()=>({start:'',end:'',lunch:'',reg:0,ot:0,dt:0}));
+        let y=startY;
+
+        // Employee Name + Client Name header
+        page.drawText('Employee Name: '+(emp.employee_name||''),{x:36,y,size:9,font:fontBold,color:CHARCOAL});
+        page.drawText('Client Name: '+(clientName||'FUND FOR PUBLIC HEALTH'),{x:300,y,size:9,font:fontBold,color:CHARCOAL});
+        y-=13;
+        page.drawText('Week Ending: '+(emp.week_ending||''),{x:36,y,size:9,font:fontBold,color:CHARCOAL});
+        page.drawText('Status: APPROVED',{x:300,y,size:9,font:fontBold,color:CHARCOAL});
+        y-=18;
+
+        // Grid table — column positions
+        const cols=[36,105,160,215,270,325,380,435,490,555]; // label + Mon-Sun + Total
+        const colW=[69,55,55,55,55,55,55,55,65]; // widths
+        const gridW=cols[cols.length-1]+colW[colW.length-1]-cols[0]; // total width
+
+        // Header row
+        const hdrH=16;
+        page.drawRectangle({x:cols[0],y:y-hdrH,width:gridW,height:hdrH,
+          borderColor:GRIDLINE,borderWidth:0.5,color:WHITE});
+        // Column headers
+        const hdrs=['','Mon','Tue','Wed','Thu','Fri','Sat','Sun','Total'];
+        hdrs.forEach((h,hi)=>{
+          if(hi===0) return;
+          page.drawText(h,{x:cols[hi]+colW[hi]/2-font.widthOfTextAtSize(h,7.5)/2,y:y-hdrH+4,size:7.5,font:fontBold,color:CHARCOAL});
+        });
+        y-=hdrH;
+
+        // Data rows
+        const rowLabels=['Time Started:','Time Finished:','Less Lunch:','Regular Hours:','Overtime Hours:','Double Time Hours:'];
+        const rowKeys=['start','end','lunch','reg','ot','dt'];
+        const rowH=14;
+
+        rowLabels.forEach((label,ri)=>{
+          const key=rowKeys[ri];
+          const isHours=(key==='reg'||key==='ot'||key==='dt');
+          // Row background
+          page.drawRectangle({x:cols[0],y:y-rowH,width:gridW,height:rowH,
+            borderColor:GRIDLINE,borderWidth:0.5,color:WHITE});
+          // Label
+          page.drawText(label,{x:cols[0]+3,y:y-rowH+4,size:7.5,font:isHours?fontBold:font,color:CHARCOAL});
+          // Day values
+          days.forEach((d,di)=>{
+            const val=grid[di]?String(grid[di][key]||''):'';
+            if(val&&val!=='0'){
+              const vw=font.widthOfTextAtSize(val,7.5);
+              page.drawText(val,{x:cols[di+1]+colW[di+1]/2-vw/2,y:y-rowH+4,size:7.5,font:isHours?fontBold:font,color:CHARCOAL});
+            }
+          });
+          // Total column for hours rows
+          if(isHours){
+            const total=grid.reduce((s,d)=>s+(parseFloat(d[key])||0),0);
+            if(total>0){
+              const ts=total.toFixed(2);
+              const tw=fontBold.widthOfTextAtSize(ts,7.5);
+              page.drawText(ts,{x:cols[8]+colW[8]-tw-3,y:y-rowH+4,size:7.5,font:fontBold,color:CHARCOAL});
+            }
+          }
+          y-=rowH;
+        });
+
+        // Total Hours row
+        page.drawRectangle({x:cols[0],y:y-rowH,width:gridW,height:rowH,
+          borderColor:GRIDLINE,borderWidth:0.5,color:WHITE});
+        const totalHours=grid.reduce((s,d)=>s+(parseFloat(d.reg)||0)+(parseFloat(d.ot)||0)+(parseFloat(d.dt)||0),0);
+        const thLabel='Total Hours:';
+        const thVal=totalHours.toFixed(2);
+        const thLabelW=fontBold.widthOfTextAtSize(thLabel,7.5);
+        page.drawText(thLabel,{x:cols[7]+colW[7]-thLabelW-2,y:y-rowH+4,size:7.5,font:fontBold,color:CHARCOAL});
+        const thValW=fontBold.widthOfTextAtSize(thVal,7.5);
+        page.drawText(thVal,{x:cols[8]+colW[8]-thValW-3,y:y-rowH+4,size:7.5,font:fontBold,color:CHARCOAL});
+        y-=rowH;
+
+        return y;
       }
 
       const pdfData=await pdfDoc.save();

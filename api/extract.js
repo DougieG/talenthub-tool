@@ -22,9 +22,9 @@ You extract structured data from scanned invoice pages.
 Respond ONLY with a valid JSON object. No markdown, no explanation, no backticks.
 
 Page types:
-- "face": A billing/invoice summary page showing ONE employee's hours, rate, total for a job code
-- "timesheet": An individual employee timesheet with daily hour breakdown
-- "other": Cover sheets, blank pages, or unrecognized content
+- "face": A billing/invoice summary page showing ONE employee's hours, rate, total for a job code. ANY page with an employee name, hours, rate, and total amount should be classified as "face" — even if the formatting varies or the scan quality is poor.
+- "timesheet": An individual employee timesheet with a daily hour breakdown grid showing days of the week (Mon-Sun) with time in/out and hours worked
+- "other": ONLY for pages that are truly blank, cover sheets with no employee data, or completely unrecognizable content. When in doubt, classify as "face" rather than "other" — it's better to extract data that can be reviewed than to miss an employee.
 
 For FACE pages, extract (flat structure, one employee per face page):
 {
@@ -80,10 +80,16 @@ For OTHER pages:
   "page_type": "other"
 }
 
-CRITICAL - Job Code extraction: TalentHub invoices have a job code that is an alphanumeric string like "N1103187", "N1234567", "H1234567". Look for it in:
+CRITICAL - Job Code extraction: TalentHub invoices have a job code that is an alphanumeric string. Common formats:
+- Letter + 7 digits: N1103187, N1234567, H1234567, B1110014, E1101270
+- Letter + 7 digits + hyphen + more digits: B1110014-59200
+Look for the FULL code (including any suffix after a hyphen) in:
 1. A box or field labeled "JOB CODE", "JOB ORDER", "P.O. NUMBER", or "PURCHASE ORDER"
 2. At the end of the job title field (e.g. "Temp Budget Analyst N1103187" -> job_code is "N1103187")
-3. Anywhere on the page that looks like a code starting with a letter followed by 7 digits
+3. In the address/client area of the invoice
+4. Anywhere on the page that looks like a code starting with a letter followed by digits
+IMPORTANT: Extract the COMPLETE code including any suffix (e.g. "B1110014-59200" not just "B1110014").
+IMPORTANT: Each face page represents exactly ONE employee. If you see multiple employees listed, extract only the PRIMARY employee for this specific page (the one whose hours/rate/total are shown).
 Always extract the job_code - it is never missing from a face page.
 
 Confidence: "high" if clearly legible, "low" if uncertain or inferred.
