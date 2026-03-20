@@ -1,6 +1,6 @@
 # TalentHub Invoice Tool — Project Handoff Document
 
-**Last Updated:** March 19, 2026
+**Last Updated:** March 20, 2026
 **Developer:** Doug Goldstein (917-841-7717)
 **Client Company:** TalentHub Workforce Inc.
 **Primary Client Contact:** Kalyn Rosado (Kalyn@talenthubworkforce.com)
@@ -57,6 +57,7 @@ After the first round of 12 bug fixes, initial visual comparison suggests the ou
 | **Mar 6** | **Kalyn's latest feedback** — 12 bugs still outstanding. This is the current bug list. |
 | **Mar 18** | All 12 bugs addressed in code. PR #1 created. |
 | **Mar 19** | Handoff document created. Ready for merge + test cycle. |
+| **Mar 20** | Repo reorganized — folders renamed for clarity, Kalyn's full 27-invoice gold standard extracted from zip. |
 
 ---
 
@@ -98,15 +99,21 @@ After the first round of 12 bug fixes, initial visual comparison suggests the ou
 
 ## 6. Key Files & Folders
 
+All project reference files are in `TalentHub-ClaudeCode/`:
+
 | Location | What It Is |
 |----------|-----------|
-| `3-reference-kalyn-originals/` | **THE GOLD STANDARD.** Kalyn's manually-produced invoices. Our tool must replicate these exactly. |
-| `4-reference-tool-outputs/` | What our tool previously produced (before bug fixes). Compare against folder 3 to see the problems. |
-| `1-inputs-batches/` | Raw batch PDFs from payroll — these are what Kalyn uploads into the tool |
-| `2-inputs-corrected-individuals/` | Kalyn's per-employee corrected invoices — reference for data accuracy |
+| `raw-batches-from-payroll/` | Raw batch PDFs from payroll (all week 02/08/2026) — this is what gets uploaded into the tool |
+| `kalyn-finished-output-week-02-08/` | **⭐ THE GOLD STANDARD.** 27 finished invoices Kalyn produced manually for the same week as the batch inputs above. This is the 1:1 input→output comparison for testing. |
+| `kalyn-finished-output-other-weeks/` | 3 more of Kalyn's finished invoices from weeks 02/15 and 02/22. Useful as extra visual reference but we don't have matching batch inputs for these. |
+| `old-tool-output-before-fixes/` | What our tool previously produced (before bug fixes). Compare against gold standard to see the problems. |
+| `archive-corrected-individuals/` | 6 sample individual invoices + the original zip from Kalyn's OneDrive. Archived for reference. |
 | `SPEC.docx` | Full project specification with bug list, email history, and acceptance criteria |
-| `index.html` | The entire front-end application (single HTML file with embedded JS/CSS) |
-| `api/extract.js` | Server-side AI extraction endpoint (runs on Vercel) |
+| `HANDOFF.md` | This document |
+| `index.html` (repo root) | The entire front-end application (single HTML file with embedded JS/CSS) |
+| `api/extract.js` (repo root) | Server-side AI extraction endpoint (runs on Vercel) |
+
+**The cleanest test:** Upload any batch PDF from `raw-batches-from-payroll/` → set week ending to 02/08/2026 → compare each output against its match in `kalyn-finished-output-week-02-08/` (match by job code in the filename, e.g. N1101230, N1103109).
 
 ---
 
@@ -125,7 +132,7 @@ For every issue, try to capture:
 1. Which batch PDF was uploaded (the filename)
 2. Which job code / employee is affected
 3. Screenshot of the problem
-4. Screenshot of what it should look like (from folder 3 gold standards)
+4. Screenshot of what it should look like (from `kalyn-finished-output-week-02-08/` gold standards)
 
 ### Step 3: Write It Up for Doug
 Format:
@@ -189,4 +196,4 @@ The tool is complete when:
 
 ---
 
-*This document is current as of March 19, 2026. The most up-to-date technical spec is in `SPEC.docx` in the project repository.*
+*This document is current as of March 20, 2026. The most up-to-date technical spec is in `SPEC.docx` in the project repository.*
