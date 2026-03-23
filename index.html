@@ -427,18 +427,33 @@ async function startParsing(){
         }
 
         tsList.forEach(ts=>{
-          if(ts.tsGrid && ts.tsGrid.length===7){
+          if(ts.tsGrid && ts.tsGrid.length>0){
+            // Normalize to exactly 7 days — pad with empty days if fewer, take first 7 if more
+            const dayNames=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+            let normalizedGrid=[];
+            if(ts.tsGrid.length===7){
+              normalizedGrid=ts.tsGrid;
+            } else {
+              // Try to match by day name if provided, otherwise pad
+              normalizedGrid=dayNames.map(dayName=>{
+                const match=ts.tsGrid.find(d=>d.day && d.day.toLowerCase().startsWith(dayName.toLowerCase().substring(0,3)));
+                return match || {start:'',end:'',lunch:'',reg:0,ot:0,dt:0};
+              });
+            }
             allTimesheets.push({
               employee_name:(ts.employee_name||'').toUpperCase().trim(),
               week_ending:ts.week_ending||'',
               client_name:ts.client_name||'',
-              tsGrid:ts.tsGrid.map(d=>({
+              tsGrid:normalizedGrid.map(d=>({
                 start:d.start||'',end:d.end||'',lunch:d.lunch||'',
                 reg:parseFloat(d.reg)||0,ot:parseFloat(d.ot)||0,dt:parseFloat(d.dt)||0
               })),
               pageIdx:i,
               job_code:r.job_code||''
             });
+            console.log(`  Timesheet for ${ts.employee_name}: ${ts.tsGrid.length} days extracted, normalized to 7`);
+          } else {
+            console.log(`  Timesheet for ${ts.employee_name}: NO grid data (tsGrid missing or empty)`);
           }
         });
       } else {
@@ -449,30 +464,42 @@ async function startParsing(){
     console.log(`Extraction complete: ${invoices.length} invoices, ${allTimesheets.length} timesheets`);
 
     // Step 3: Match timesheets to invoices by employee name
+    // Helper: normalize name for comparison (strip middle initials, extra spaces, punctuation)
+    function normName(n){ return (n||'').toUpperCase().replace(/[^A-Z,\s]/g,'').replace(/\s+/g,' ').trim(); }
+    function lastName(n){ return normName(n).split(',')[0]?.trim()||''; }
+    function firstName(n){ return normName(n).split(',')[1]?.trim().split(' ')[0]||''; }
+
     allTimesheets.forEach(ts=>{
-      const tsName=ts.employee_name;
-      // Find best matching invoice by name similarity
+      const tsNorm=normName(ts.employee_name);
+      const tsLast=lastName(ts.employee_name);
+      const tsFirst=firstName(ts.employee_name);
       let bestMatch=null;
       let bestScore=0;
 
       invoices.forEach(inv=>{
-        const invName=(inv.employee_name||'').toUpperCase().trim();
-        if(!invName) return;
+        const invNorm=normName(inv.employee_name);
+        if(!invNorm) return;
+        const invLast=lastName(inv.employee_name);
+        const invFirst=firstName(inv.employee_name);
 
-        // Exact match
-        if(invName===tsName){ bestMatch=inv; bestScore=100; return; }
+        // Exact match (after normalization)
+        if(invNorm===tsNorm){ bestMatch=inv; bestScore=100; return; }
 
-        // Last name match (most reliable for OCR variations)
-        const tsLast=tsName.split(',')[0]?.trim();
-        const invLast=invName.split(',')[0]?.trim();
+        // Last name + first name match (ignores middle initial differences)
+        if(tsLast && invLast && tsLast===invLast && tsFirst && invFirst && tsFirst===invFirst){
+          const score=95;
+          if(score>bestScore){ bestMatch=inv; bestScore=score; }
+        }
+
+        // Last name match only (most reliable for OCR variations)
         if(tsLast && invLast && tsLast===invLast){
-          const score=90;
+          const score=85;
           if(score>bestScore){ bestMatch=inv; bestScore=score; }
         }
 
         // Partial match — one name contains the other
-        if(invName.includes(tsName) || tsName.includes(invName)){
-          const score=80;
+        if(invNorm.includes(tsNorm) || tsNorm.includes(invNorm)){
+          const score=75;
           if(score>bestScore){ bestMatch=inv; bestScore=score; }
         }
       });
@@ -480,7 +507,9 @@ async function startParsing(){
       if(bestMatch){
         bestMatch.tsPages.push(ts.pageIdx);
         bestMatch.tsGrid=ts.tsGrid;
-        // Do NOT overwrite hours from face page — face page hours are authoritative
+        console.log(`  Matched timesheet "${ts.employee_name}" → invoice "${bestMatch.employee_name}" (score:${bestScore})`);
+      } else {
+        console.log(`  ⚠️ UNMATCHED timesheet: "${ts.employee_name}" — no invoice found`);
       }
     });
 
