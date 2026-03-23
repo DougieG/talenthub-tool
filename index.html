@@ -265,7 +265,7 @@ async function startParsing(){
       allPdfBytes.push(bytes);
       const pdf=await pdfjsLib.getDocument({data:bytes.slice()}).promise;
       for(let p=1;p<=pdf.numPages;p++){
-        allPages.push({fileIdx:fi,pageNum:p,globalIdx});
+        allPages.push({fileIdx:fi,pageNum:p,globalIdx,fileName:file.name});
         globalIdx++;
       }
     }
@@ -288,6 +288,14 @@ async function startParsing(){
       pageImages.push(canvas.toDataURL('image/jpeg',0.85));
     }
 
+    // Get week ending from date picker
+    const we=document.getElementById('we').value;
+    let weFmt='';
+    if(we){
+      const p=we.split('-');
+      weFmt=p[1]+'/'+p[2]+'/'+p[0];
+    }
+
     // Classify + extract all pages in one pass
     document.getElementById('spinMsg').textContent='Analyzing pages with AI...';
     document.getElementById('progFill').style.width='30%';
@@ -297,41 +305,140 @@ async function startParsing(){
       document.getElementById('spinDetail').textContent=`Analyzing page ${i+1} of ${totalPages}...`;
       document.getElementById('progFill').style.width=(30+Math.round(((i+1)/totalPages)*65))+'%';
       const imgData=pageImages[i].split(',')[1];
-      const result=await analyzePageAPI(imgData);
+      const result=await analyzePageAPI(imgData, i+1, allPages[i].fileName, weFmt);
       pageResults.push(result);
     }
 
-    // Group: each face page starts a new invoice, subsequent timesheets belong to it
-    let currentInv=null;
-    let invIdx=0;
+    // === NEW GROUPING LOGIC ===
+    // Step 1: Expand face pages into individual employee invoices
+    // Step 2: Collect all timesheet grids
+    // Step 3: Match timesheets to employees by name
 
+    let invIdx=0;
+    const allTimesheets=[]; // {employee_name, tsGrid, pageIdx, job_code}
+
+    // First pass: extract all face employees and all timesheets
     for(let i=0;i<totalPages;i++){
       const r=pageResults[i];
+
       if(r.page_type==='face'){
-        if(currentInv) invoices.push(currentInv);
-        currentInv={id:invIdx++,facePage:i,tsPages:[],fileIdx:allPages[i].fileIdx,...r};
-        // Add confidence
-        currentInv.confidence={};
-        ['employee_name','job_code','hours','bill_rate','pay_rate','line_total','job_title'].forEach(k=>{
-          currentInv.confidence[k]=currentInv[k]?'high':'low';
-        });
-      } else if(r.page_type==='timesheet' && currentInv){
-        currentInv.tsPages.push(i);
-        // Merge tsGrid from timesheet extraction if present
-        if(r.tsGrid && r.tsGrid.length===7){
-          currentInv.tsGrid=r.tsGrid.map(d=>({
-            start:d.start||'',end:d.end||'',lunch:d.lunch||'',
-            reg:d.reg||0,ot:d.ot||0,dt:d.dt||0
-          }));
-          // Recalculate hours from grid
-          const totalH=currentInv.tsGrid.reduce((s,d)=>s+(parseFloat(d.reg)||0)+(parseFloat(d.ot)||0)+(parseFloat(d.dt)||0),0);
-          if(totalH>0) currentInv.hours=totalH.toFixed(2);
+        // New format: r.employees is an array
+        const empList=r.employees||[];
+        // Fallback for old single-employee format
+        if(empList.length===0 && r.employee_name){
+          empList.push({
+            employee_name:r.employee_name,
+            job_title:r.job_title||'',
+            assignment:r.assignment||'Payroll',
+            hours:r.hours||0,
+            bill_rate:r.bill_rate||0,
+            pay_rate:r.pay_rate||0,
+            line_total:r.line_total||0
+          });
         }
-      } else if(currentInv){
-        currentInv.tsPages.push(i);
+
+        empList.forEach(emp=>{
+          invoices.push({
+            id:invIdx++,
+            facePage:i,
+            tsPages:[],
+            fileIdx:allPages[i].fileIdx,
+            page_type:'face',
+            // Page-level fields
+            invoice_no:r.invoice_no||'',
+            invoice_date:r.invoice_date||'',
+            account_no:r.account_no||'',
+            job_code:r.job_code||'',
+            client_name:r.client_name||'',
+            client_number:r.client_number||'',
+            attn_to:r.attn_to||'',
+            week_ending:r.week_ending||weFmt,
+            // Employee-level fields
+            employee_name:emp.employee_name||'',
+            job_title:emp.job_title||'',
+            assignment:emp.assignment||'Payroll',
+            hours:emp.hours||0,
+            bill_rate:emp.bill_rate||0,
+            pay_rate:emp.pay_rate||0,
+            line_total:emp.line_total||0,
+            // Confidence based on actual values
+            confidence:{
+              employee_name:emp.employee_name?'high':'low',
+              job_code:r.job_code?'high':'low',
+              hours:emp.hours?'high':'low',
+              bill_rate:emp.bill_rate?'high':'low',
+              pay_rate:emp.pay_rate?'high':'low',
+              line_total:emp.line_total?'high':'low',
+              job_title:emp.job_title?'high':'low'
+            }
+          });
+        });
+
+      } else if(r.page_type==='timesheet'){
+        // New format: r.timesheets is an array
+        const tsList=r.timesheets||[];
+        // Fallback for old single-timesheet format
+        if(tsList.length===0 && r.employee_name && r.tsGrid){
+          tsList.push({
+            employee_name:r.employee_name,
+            week_ending:r.week_ending||'',
+            tsGrid:r.tsGrid
+          });
+        }
+
+        tsList.forEach(ts=>{
+          if(ts.tsGrid && ts.tsGrid.length===7){
+            allTimesheets.push({
+              employee_name:(ts.employee_name||'').toUpperCase().trim(),
+              week_ending:ts.week_ending||'',
+              client_name:ts.client_name||'',
+              tsGrid:ts.tsGrid.map(d=>({
+                start:d.start||'',end:d.end||'',lunch:d.lunch||'',
+                reg:parseFloat(d.reg)||0,ot:parseFloat(d.ot)||0,dt:parseFloat(d.dt)||0
+              })),
+              pageIdx:i,
+              job_code:r.job_code||''
+            });
+          }
+        });
       }
     }
-    if(currentInv) invoices.push(currentInv);
+
+    // Step 3: Match timesheets to invoices by employee name
+    allTimesheets.forEach(ts=>{
+      const tsName=ts.employee_name;
+      // Find best matching invoice by name similarity
+      let bestMatch=null;
+      let bestScore=0;
+
+      invoices.forEach(inv=>{
+        const invName=(inv.employee_name||'').toUpperCase().trim();
+        if(!invName) return;
+
+        // Exact match
+        if(invName===tsName){ bestMatch=inv; bestScore=100; return; }
+
+        // Last name match (most reliable for OCR variations)
+        const tsLast=tsName.split(',')[0]?.trim();
+        const invLast=invName.split(',')[0]?.trim();
+        if(tsLast && invLast && tsLast===invLast){
+          const score=90;
+          if(score>bestScore){ bestMatch=inv; bestScore=score; }
+        }
+
+        // Partial match — one name contains the other
+        if(invName.includes(tsName) || tsName.includes(invName)){
+          const score=80;
+          if(score>bestScore){ bestMatch=inv; bestScore=score; }
+        }
+      });
+
+      if(bestMatch){
+        bestMatch.tsPages.push(ts.pageIdx);
+        bestMatch.tsGrid=ts.tsGrid;
+        // Do NOT overwrite hours from face page — face page hours are authoritative
+      }
+    });
 
     document.getElementById('progFill').style.width='100%';
 
@@ -341,11 +448,8 @@ async function startParsing(){
       return;
     }
 
-    // Fill in week ending for any missing
-    const we=document.getElementById('we').value;
-    if(we){
-      const p=we.split('-');
-      const weFmt=p[1]+'/'+p[2]+'/'+p[0];
+    // Fill in week ending for any still missing
+    if(weFmt){
       invoices.forEach(inv=>{if(!inv.week_ending)inv.week_ending=weFmt});
     }
 
@@ -358,12 +462,17 @@ async function startParsing(){
   }
 }
 
-async function analyzePageAPI(imgBase64){
+async function analyzePageAPI(imgBase64, pageNum, fileName, weekEnding){
   try{
     const resp=await fetch('/api/extract',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({image_base64:imgBase64})
+      body:JSON.stringify({
+        image_base64:imgBase64,
+        page_num:pageNum,
+        file_name:fileName,
+        week_ending:weekEnding
+      })
     });
     if(!resp.ok){
       console.error('API error:',resp.status);
@@ -532,7 +641,9 @@ function upd(i,key,val){
 function recalc(i){
   const h=parseFloat(invoices[i].hours)||0;
   const r=parseFloat(invoices[i].bill_rate)||0;
-  invoices[i].line_total=(h*r).toFixed(2);
+  const newTotal=(h*r).toFixed(2);
+  // Only auto-recalc if hours or rate changed meaningfully
+  invoices[i].line_total=newTotal;
   const card=document.getElementById('c'+i);
   if(card){
     card.querySelectorAll('.fg').forEach(fg=>{
