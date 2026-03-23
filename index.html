@@ -322,12 +322,19 @@ async function startParsing(){
       const r=pageResults[i];
 
       if(r.page_type==='face'){
+        console.log(`Page ${i+1} face raw:`, JSON.stringify(r).substring(0,500));
+
+        // Build employee list from whatever format the API returns
+        let empList=[];
+
         // New format: r.employees is an array
-        const empList=r.employees||[];
-        // Fallback for old single-employee format
-        if(empList.length===0 && r.employee_name){
+        if(Array.isArray(r.employees) && r.employees.length>0){
+          empList=r.employees;
+        }
+        // Old/fallback format: employee data at top level
+        else if(r.employee_name || r.hours || r.bill_rate || r.line_total){
           empList.push({
-            employee_name:r.employee_name,
+            employee_name:r.employee_name||'',
             job_title:r.job_title||'',
             assignment:r.assignment||'Payroll',
             hours:r.hours||0,
@@ -336,8 +343,32 @@ async function startParsing(){
             line_total:r.line_total||0
           });
         }
+        // Last resort: create one empty employee so the page isn't lost
+        else {
+          console.warn(`Page ${i+1}: face page with no employee data found. Raw:`, JSON.stringify(r));
+          empList.push({
+            employee_name:'',
+            job_title:'',
+            assignment:'Payroll',
+            hours:0,
+            bill_rate:0,
+            pay_rate:0,
+            line_total:0
+          });
+        }
 
         empList.forEach(emp=>{
+          // Handle potential nested name formats
+          const empName = emp.employee_name || emp.name || '';
+          const empHours = parseFloat(emp.hours)||0;
+          const empBillRate = parseFloat(emp.bill_rate)||0;
+          const empPayRate = parseFloat(emp.pay_rate)||0;
+          // Use extracted line_total if available, otherwise calculate
+          let empLineTotal = parseFloat(emp.line_total)||0;
+          if(empLineTotal===0 && empHours>0 && empBillRate>0){
+            empLineTotal = empHours * empBillRate;
+          }
+
           invoices.push({
             id:invIdx++,
             facePage:i,
@@ -354,34 +385,42 @@ async function startParsing(){
             attn_to:r.attn_to||'',
             week_ending:r.week_ending||weFmt,
             // Employee-level fields
-            employee_name:emp.employee_name||'',
-            job_title:emp.job_title||'',
+            employee_name:empName,
+            job_title:emp.job_title||emp.title||'',
             assignment:emp.assignment||'Payroll',
-            hours:emp.hours||0,
-            bill_rate:emp.bill_rate||0,
-            pay_rate:emp.pay_rate||0,
-            line_total:emp.line_total||0,
+            hours:empHours,
+            bill_rate:empBillRate,
+            pay_rate:empPayRate,
+            line_total:empLineTotal,
             // Confidence based on actual values
             confidence:{
-              employee_name:emp.employee_name?'high':'low',
+              employee_name:empName?'high':'low',
               job_code:r.job_code?'high':'low',
-              hours:emp.hours?'high':'low',
-              bill_rate:emp.bill_rate?'high':'low',
-              pay_rate:emp.pay_rate?'high':'low',
-              line_total:emp.line_total?'high':'low',
-              job_title:emp.job_title?'high':'low'
+              hours:empHours?'high':'low',
+              bill_rate:empBillRate?'high':'low',
+              pay_rate:empPayRate?'high':'low',
+              line_total:empLineTotal?'high':'low',
+              job_title:(emp.job_title||emp.title)?'high':'low'
             }
           });
         });
 
       } else if(r.page_type==='timesheet'){
+        console.log(`Page ${i+1} timesheet raw:`, JSON.stringify(r).substring(0,500));
+
+        // Build timesheet list from whatever format the API returns
+        let tsList=[];
+
         // New format: r.timesheets is an array
-        const tsList=r.timesheets||[];
-        // Fallback for old single-timesheet format
-        if(tsList.length===0 && r.employee_name && r.tsGrid){
+        if(Array.isArray(r.timesheets) && r.timesheets.length>0){
+          tsList=r.timesheets;
+        }
+        // Old/fallback format: single timesheet at top level
+        else if(r.employee_name && r.tsGrid){
           tsList.push({
             employee_name:r.employee_name,
             week_ending:r.week_ending||'',
+            client_name:r.client_name||'',
             tsGrid:r.tsGrid
           });
         }
@@ -401,8 +440,12 @@ async function startParsing(){
             });
           }
         });
+      } else {
+        console.log(`Page ${i+1} type=${r.page_type} raw:`, JSON.stringify(r).substring(0,300));
       }
     }
+
+    console.log(`Extraction complete: ${invoices.length} invoices, ${allTimesheets.length} timesheets`);
 
     // Step 3: Match timesheets to invoices by employee name
     allTimesheets.forEach(ts=>{
