@@ -138,7 +138,7 @@ If week_ending not found, use: "${week_ending || ""}".`;
   try {
     const response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 4000,
+      max_tokens: 16000,
       system: systemPrompt,
       messages: [
         {
@@ -172,9 +172,92 @@ If week_ending not found, use: "${week_ending || ""}".`;
       return res.status(200).json({ page_type: "other", parse_error: true });
     }
 
+    // Schema validation & coercion
+    const warnings = [];
+    const validTypes = ["face", "timesheet", "other"];
+    if (!validTypes.includes(parsed.page_type)) {
+      warnings.push(`Invalid page_type "${parsed.page_type}", defaulting to "other"`);
+      parsed.page_type = "other";
+    }
+
+    if (parsed.page_type === "face") {
+      if (!Array.isArray(parsed.employees)) {
+        // Try to recover: if employee data exists at top level, wrap it
+        if (parsed.employee_name || parsed.hours || parsed.bill_rate) {
+          parsed.employees = [{
+            employee_name: parsed.employee_name || null,
+            job_title: parsed.job_title || null,
+            assignment: parsed.assignment || "Payroll",
+            hours: parseFloat(parsed.hours) || 0,
+            bill_rate: parseFloat(parsed.bill_rate) || 0,
+            pay_rate: parseFloat(parsed.pay_rate) || 0,
+            line_total: parseFloat(parsed.line_total) || 0
+          }];
+          warnings.push("Wrapped top-level employee data into employees array");
+        } else {
+          parsed.employees = [];
+          warnings.push("Face page missing employees array");
+        }
+      }
+      parsed.employees = parsed.employees.map((emp, idx) => ({
+        employee_name: emp.employee_name || emp.name || null,
+        job_title: emp.job_title || emp.title || null,
+        assignment: emp.assignment || "Payroll",
+        hours: parseFloat(emp.hours) || 0,
+        bill_rate: parseFloat(emp.bill_rate) || 0,
+        pay_rate: parseFloat(emp.pay_rate) || 0,
+        line_total: parseFloat(emp.line_total) || 0
+      }));
+      // Coerce page-level fields
+      parsed.invoice_no = parsed.invoice_no || null;
+      parsed.invoice_date = parsed.invoice_date || null;
+      parsed.account_no = parsed.account_no || null;
+      parsed.job_code = parsed.job_code || null;
+      parsed.client_name = parsed.client_name || null;
+      parsed.client_number = parsed.client_number || null;
+      parsed.attn_to = parsed.attn_to || null;
+      parsed.week_ending = parsed.week_ending || null;
+    }
+
+    if (parsed.page_type === "timesheet") {
+      if (!Array.isArray(parsed.timesheets)) {
+        if (parsed.employee_name && parsed.tsGrid) {
+          parsed.timesheets = [{
+            employee_name: parsed.employee_name,
+            week_ending: parsed.week_ending || null,
+            client_name: parsed.client_name || null,
+            tsGrid: parsed.tsGrid
+          }];
+          warnings.push("Wrapped top-level timesheet data into timesheets array");
+        } else {
+          parsed.timesheets = [];
+          warnings.push("Timesheet page missing timesheets array");
+        }
+      }
+      parsed.timesheets = parsed.timesheets.map(ts => ({
+        employee_name: ts.employee_name || null,
+        week_ending: ts.week_ending || null,
+        client_name: ts.client_name || null,
+        tsGrid: Array.isArray(ts.tsGrid) ? ts.tsGrid.map(d => ({
+          day: d.day || "",
+          start: d.start || "",
+          end: d.end || "",
+          lunch: d.lunch || "",
+          reg: parseFloat(d.reg) || 0,
+          ot: parseFloat(d.ot) || 0,
+          dt: parseFloat(d.dt) || 0
+        })) : []
+      }));
+    }
+
+    if (warnings.length > 0) {
+      parsed.validation_warnings = warnings;
+      console.warn("Validation warnings:", warnings);
+    }
+
     return res.status(200).json(parsed);
   } catch (err) {
     console.error("Anthropic API error:", err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: "Extraction failed. Please try again." });
   }
 }
