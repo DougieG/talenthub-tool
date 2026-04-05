@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TalentHub Template Configurator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #F7F8FA;
+  color: #1A1D23;
+  height: 100vh;
+  overflow: hidden;
+}
+
+:root {
+  --g: #4BA37B;
+  --gd: #3A8A65;
+  --gl: #E8F5EE;
+  --gb: #F0FAF5;
+  --b: #E2E5EA;
+  --tm: #6B7280;
+  --r: #D94F4F;
+}
+
+/* Header */
+.hdr {
+  background: #fff;
+  border-bottom: 1px solid var(--b);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  z-index: 100;
+  height: 52px;
+}
+
+.hdr h1 {
+  font-size: 16px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.hdr h1 span {
+  color: var(--g);
+}
+
+.btn {
+  padding: 7px 16px;
+  border: 1px solid var(--b);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  color: #1A1D23;
+  transition: all .15s;
+}
+
+.btn:hover {
+  background: #f3f4f6;
+  border-color: #ccc;
+}
+
+.btn-primary {
+  background: var(--g);
+  color: #fff;
+  border-color: var(--gd);
+}
+
+.btn-primary:hover {
+  background: var(--gd);
+}
+
+/* Layout */
+.main {
+  display: flex;
+  height: calc(100vh - 52px);
+}
+
+/* Canvas area */
+.canvas-wrap {
+  flex: 1;
+  overflow: auto;
+  background: #E8EAED;
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+}
+
+.canvas-container {
+  position: relative;
+  box-shadow: 0 4px 20px rgba(0,0,0,.15);
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.canvas-container canvas {
+  display: block;
+}
+
+#refCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+/* Field overlays */
+.field-overlay {
+  position: absolute;
+  cursor: move;
+  white-space: nowrap;
+  user-select: none;
+  padding: 1px 3px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  transition: border-color .1s, background .1s;
+  line-height: 1.2;
+}
+
+.field-overlay:hover {
+  border-color: rgba(75, 163, 123, .5);
+  background: rgba(75, 163, 123, .06);
+}
+
+.field-overlay.selected {
+  border-color: var(--g);
+  background: rgba(75, 163, 123, .1);
+  box-shadow: 0 0 0 2px rgba(75, 163, 123, .25);
+  z-index: 10;
+}
+
+.field-overlay .field-tag {
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  font-size: 9px;
+  background: var(--g);
+  color: #fff;
+  padding: 1px 5px;
+  border-radius: 3px 3px 0 0;
+  white-space: nowrap;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.field-overlay.selected .field-tag,
+.field-overlay:hover .field-tag {
+  display: block;
+}
+
+/* Right panel */
+.panel {
+  width: 300px;
+  background: #fff;
+  border-left: 1px solid var(--b);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-section {
+  border-bottom: 1px solid var(--b);
+}
+
+.panel-header {
+  padding: 10px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--tm);
+  background: #FAFBFC;
+  border-bottom: 1px solid var(--b);
+}
+
+/* Field list */
+.field-list {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.field-item {
+  padding: 6px 16px;
+  font-size: 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #f3f4f6;
+  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  color: #374151;
+  transition: background .1s;
+}
+
+.field-item:hover {
+  background: var(--gb);
+}
+
+.field-item.selected {
+  background: var(--gl);
+  color: var(--gd);
+  font-weight: 600;
+}
+
+.field-item .dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.field-item .dot.has-pos {
+  background: var(--g);
+}
+
+.field-item .dot.no-pos {
+  background: var(--b);
+}
+
+/* Properties */
+.props {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.prop-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prop-row label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tm);
+  width: 42px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.prop-row input, .prop-row select {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid var(--b);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  outline: none;
+  background: #fff;
+}
+
+.prop-row input:focus, .prop-row select:focus {
+  border-color: var(--g);
+  box-shadow: 0 0 0 2px rgba(75, 163, 123, .15);
+}
+
+.prop-row input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.prop-row input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+
+/* Reference section */
+.ref-section {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ref-section .slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ref-section .slider-row label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tm);
+  width: 56px;
+  flex-shrink: 0;
+}
+
+.ref-section input[type="range"] {
+  flex: 1;
+  accent-color: var(--g);
+}
+
+.ref-section .slider-val {
+  font-size: 11px;
+  color: var(--tm);
+  width: 30px;
+  text-align: right;
+}
+
+/* Actions */
+.actions {
+  padding: 12px 16px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.actions .btn {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+/* Status bar */
+.status {
+  padding: 6px 16px;
+  font-size: 11px;
+  color: var(--tm);
+  background: #FAFBFC;
+  border-top: 1px solid var(--b);
+}
+
+.no-selection {
+  padding: 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--tm);
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: #1A1D23;
+  color: #fff;
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 13px;
+  z-index: 999;
+  transition: transform .3s;
+  pointer-events: none;
+}
+
+.toast.show {
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Coord display */
+.coord-display {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  background: rgba(0,0,0,.7);
+  color: #fff;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: 'SF Mono', monospace;
+  pointer-events: none;
+  z-index: 20;
+}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <h1><span>TalentHub</span> Template Configurator</h1>
+  <button class="btn" id="btnImport">Import layout.json</button>
+  <button class="btn btn-primary" id="btnExport">Export layout.json</button>
+</div>
+
+<div class="main">
+  <div class="canvas-wrap" id="canvasWrap">
+    <div class="canvas-container" id="canvasContainer">
+      <canvas id="pdfCanvas"></canvas>
+      <canvas id="refCanvas"></canvas>
+      <div class="coord-display" id="coordDisplay" style="display:none;"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-section field-list" id="fieldListSection">
+      <div class="panel-header">Fields</div>
+      <div id="fieldList"></div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-header">Properties</div>
+      <div id="propsPanel">
+        <div class="no-selection">Select a field to edit properties</div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-header">Reference Overlay</div>
+      <div class="ref-section">
+        <button class="btn" id="btnRefUpload" style="width:100%;">Upload Reference PDF</button>
+        <input type="file" id="refFileInput" accept=".pdf" style="display:none;">
+        <div class="slider-row">
+          <label>Opacity</label>
+          <input type="range" id="refOpacity" min="0" max="100" value="30">
+          <span class="slider-val" id="refOpacityVal">30%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="actions">
+        <button class="btn" id="btnUndo" title="Ctrl+Z">Undo</button>
+        <button class="btn" id="btnRedo" title="Ctrl+Shift+Z">Redo</button>
+      </div>
+    </div>
+
+    <div class="status" id="statusBar">Ready</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<input type="file" id="importFileInput" accept=".json" style="display:none;">
+
+<script>
+// =========================================================================
+// TalentHub Template Configurator
+// =========================================================================
+
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ---- Constants ----
+const PAGE_W = 612;
+const PAGE_H = 792;
+
+const SAMPLE_DATA = {
+  'info_boxes.invoice_no':   '1065592',
+  'info_boxes.account_no':   '433297',
+  'info_boxes.invoice_date': '02/13/26',
+  'info_boxes.po_number':    'N1103109',
+  'client.name':    'FUND FOR PUBLIC HEALTH #227',
+  'client.attn':    '30% MARKUP',
+  'client.addr1':   '22 CORTLANDT STREET',
+  'client.jobcode': 'N1103109',
+  'client.city':    'New York, NY 10007',
+  'grid.week_worked':        'WeekWorked: 02/08/2026',
+  'grid.columns.employee_name': 'CASTILLO, ANGELA',
+  'grid.columns.week_ending':   '02/08/2026',
+  'grid.columns.assignment':    'Payroll',
+  'grid.columns.reg_label':     'Reg',
+  'grid.columns.hours':         '21.00',
+  'grid.columns.rate':          '$28.60',
+  'grid.columns.total':         '$600.60',
+  'grid.reference_line':        '[ Invoice Reference:Bilingual Outreach Associate $23]',
+  'footer.total_due_value': '$641.23',
+  'footer.page_number':     'Page 1 of 2'
+};
+
+// ---- State ----
+let layout = null;
+let fields = [];       // {key, x, y, fontSize, align, color, font}
+let selectedKey = null;
+let scale = 1;
+let undoStack = [];
+let redoStack = [];
+let dragging = null;   // {key, startX, startY, origPdfX, origPdfY}
+
+// ---- DOM refs ----
+const canvasWrap = document.getElementById('canvasWrap');
+const canvasContainer = document.getElementById('canvasContainer');
+const pdfCanvas = document.getElementById('pdfCanvas');
+const refCanvas = document.getElementById('refCanvas');
+const fieldListEl = document.getElementById('fieldList');
+const propsPanel = document.getElementById('propsPanel');
+const statusBar = document.getElementById('statusBar');
+const coordDisplay = document.getElementById('coordDisplay');
+const toastEl = document.getElementById('toast');
+
+// ---- Utility ----
+function toast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  setTimeout(() => toastEl.classList.remove('show'), 2000);
+}
+
+function setStatus(msg) {
+  statusBar.textContent = msg;
+}
+
+function pdfYtoCanvasY(pdfY) {
+  return (PAGE_H - pdfY) * scale;
+}
+
+function canvasYtoPdfY(cy) {
+  return PAGE_H - (cy / scale);
+}
+
+function canvasXtoPdfX(cx) {
+  return cx / scale;
+}
+
+function pdfXtoCanvasX(pdfX) {
+  return pdfX * scale;
+}
+
+function snapToGrid(v) {
+  return Math.round(v);
+}
+
+// ---- Layout parsing: flatten layout.json into fields array ----
+function parseLayout(data) {
+  const result = [];
+  layout = data;
+
+  // info_boxes
+  if (data.info_boxes) {
+    for (const [k, v] of Object.entries(data.info_boxes)) {
+      result.push({
+        key: 'info_boxes.' + k,
+        x: v.x, y: v.y,
+        fontSize: v.fontSize || 9,
+        align: v.align || 'left',
+        color: v.color || '#504A4A',
+        font: v.font || 'Helvetica'
+      });
+    }
+  }
+
+  // client
+  if (data.client) {
+    for (const [k, v] of Object.entries(data.client)) {
+      result.push({
+        key: 'client.' + k,
+        x: v.x, y: v.y,
+        fontSize: v.fontSize || 10,
+        align: v.align || 'left',
+        color: v.color || '#504A4A',
+        font: v.font || 'Helvetica'
+      });
+    }
+  }
+
+  // grid.week_worked
+  if (data.grid && data.grid.week_worked) {
+    const ww = data.grid.week_worked;
+    result.push({
+      key: 'grid.week_worked',
+      x: ww.x, y: ww.y,
+      fontSize: ww.fontSize || 9,
+      align: 'left',
+      color: ww.color || '#504A4A',
+      font: ww.font || 'HelveticaBold'
+    });
+  }
+
+  // grid.columns — place at grid.row_start_y
+  if (data.grid && data.grid.columns) {
+    const rowY = data.grid.row_start_y || 510;
+    for (const [k, v] of Object.entries(data.grid.columns)) {
+      result.push({
+        key: 'grid.columns.' + k,
+        x: v.x,
+        y: rowY,
+        fontSize: data.grid.fontSize || 9,
+        align: v.align || 'left',
+        color: data.grid.color || '#504A4A',
+        font: data.grid.font || 'Helvetica'
+      });
+    }
+    // reference line
+    const refLineOffset = data.grid.reference_line_offset || 15;
+    result.push({
+      key: 'grid.reference_line',
+      x: (data.grid.columns.employee_name && data.grid.columns.employee_name.x) || 38,
+      y: rowY - refLineOffset,
+      fontSize: (data.grid.reference && data.grid.reference.fontSize) || 7.5,
+      align: 'left',
+      color: (data.grid.reference && data.grid.reference.color) || '#999999',
+      font: (data.grid.reference && data.grid.reference.font) || 'Helvetica'
+    });
+  }
+
+  // footer
+  if (data.footer) {
+    for (const [k, v] of Object.entries(data.footer)) {
+      result.push({
+        key: 'footer.' + k,
+        x: v.x, y: v.y,
+        fontSize: v.fontSize || 9,
+        align: v.align || 'left',
+        color: v.color || '#504A4A',
+        font: v.font || 'Helvetica'
+      });
+    }
+  }
+
+  return result;
+}
+
+// ---- Rebuild layout.json from fields array ----
+function buildLayoutJSON() {
+  const out = JSON.parse(JSON.stringify(layout));
+
+  for (const f of fields) {
+    const parts = f.key.split('.');
+    if (parts[0] === 'info_boxes' && out.info_boxes && out.info_boxes[parts[1]]) {
+      Object.assign(out.info_boxes[parts[1]], { x: f.x, y: f.y, fontSize: f.fontSize, align: f.align, color: f.color });
+    } else if (parts[0] === 'client' && out.client && out.client[parts[1]]) {
+      Object.assign(out.client[parts[1]], { x: f.x, y: f.y, fontSize: f.fontSize, align: f.align, color: f.color });
+    } else if (parts[0] === 'grid' && parts[1] === 'week_worked' && out.grid) {
+      Object.assign(out.grid.week_worked, { x: f.x, y: f.y, fontSize: f.fontSize, color: f.color });
+    } else if (parts[0] === 'grid' && parts[1] === 'columns' && parts[2] && out.grid && out.grid.columns && out.grid.columns[parts[2]]) {
+      out.grid.columns[parts[2]].x = f.x;
+      out.grid.columns[parts[2]].align = f.align;
+      // Update shared grid props
+      out.grid.fontSize = f.fontSize;
+      out.grid.color = f.color;
+      // Update row_start_y from any column field
+      out.grid.row_start_y = f.y;
+    } else if (parts[0] === 'grid' && parts[1] === 'reference_line') {
+      // Derive reference line offset from employee_name row
+      const empField = fields.find(ff => ff.key === 'grid.columns.employee_name');
+      if (empField && out.grid) {
+        out.grid.reference_line_offset = empField.y - f.y;
+      }
+      if (out.grid && out.grid.reference) {
+        out.grid.reference.fontSize = f.fontSize;
+        out.grid.reference.color = f.color;
+      }
+    } else if (parts[0] === 'footer' && out.footer && out.footer[parts[1]]) {
+      Object.assign(out.footer[parts[1]], { x: f.x, y: f.y, fontSize: f.fontSize, align: f.align, color: f.color });
+    }
+  }
+
+  return out;
+}
+
+// ---- Undo/Redo ----
+function pushUndo() {
+  undoStack.push(JSON.stringify(fields));
+  redoStack = [];
+  if (undoStack.length > 100) undoStack.shift();
+}
+
+function undo() {
+  if (undoStack.length === 0) return;
+  redoStack.push(JSON.stringify(fields));
+  fields = JSON.parse(undoStack.pop());
+  renderOverlays();
+  updatePropsPanel();
+  updateFieldList();
+  toast('Undo');
+}
+
+function redo() {
+  if (redoStack.length === 0) return;
+  undoStack.push(JSON.stringify(fields));
+  fields = JSON.parse(redoStack.pop());
+  renderOverlays();
+  updatePropsPanel();
+  updateFieldList();
+  toast('Redo');
+}
+
+// ---- Render PDF template ----
+async function renderTemplate() {
+  try {
+    const resp = await fetch('blank-template.pdf');
+    const data = await resp.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data }).promise;
+    const page = await pdf.getPage(1);
+
+    // Determine scale to fit canvas area
+    const wrapRect = canvasWrap.getBoundingClientRect();
+    const maxH = wrapRect.height - 48;
+    const maxW = wrapRect.width - 48;
+    const scaleH = maxH / PAGE_H;
+    const scaleW = maxW / PAGE_W;
+    scale = Math.min(scaleH, scaleW, 1.5);
+
+    const viewport = page.getViewport({ scale });
+    pdfCanvas.width = viewport.width;
+    pdfCanvas.height = viewport.height;
+    canvasContainer.style.width = viewport.width + 'px';
+    canvasContainer.style.height = viewport.height + 'px';
+
+    refCanvas.width = viewport.width;
+    refCanvas.height = viewport.height;
+
+    const ctx = pdfCanvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+
+    setStatus('Template loaded (' + Math.round(scale * 100) + '% scale)');
+  } catch (e) {
+    setStatus('Error loading template: ' + e.message);
+    console.error(e);
+  }
+}
+
+// ---- Reference PDF overlay ----
+async function loadReference(file) {
+  try {
+    const data = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data }).promise;
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale });
+
+    refCanvas.width = viewport.width;
+    refCanvas.height = viewport.height;
+
+    const ctx = refCanvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+
+    const opacity = document.getElementById('refOpacity').value / 100;
+    refCanvas.style.opacity = opacity;
+    refCanvas.style.display = 'block';
+
+    toast('Reference PDF loaded');
+  } catch (e) {
+    toast('Error loading reference: ' + e.message);
+  }
+}
+
+// ---- Field overlays ----
+function renderOverlays() {
+  // Remove existing overlays
+  canvasContainer.querySelectorAll('.field-overlay').forEach(el => el.remove());
+
+  for (const f of fields) {
+    const el = document.createElement('div');
+    el.className = 'field-overlay' + (f.key === selectedKey ? ' selected' : '');
+    el.dataset.key = f.key;
+
+    const sampleText = SAMPLE_DATA[f.key] || f.key;
+    el.textContent = sampleText;
+
+    // Tag
+    const tag = document.createElement('div');
+    tag.className = 'field-tag';
+    tag.textContent = f.key;
+    el.appendChild(tag);
+
+    // Style
+    el.style.fontSize = (f.fontSize * scale) + 'px';
+    el.style.color = f.color || '#504A4A';
+    el.style.fontFamily = (f.font && f.font.includes('Bold')) ? 'Helvetica, Arial, sans-serif' : 'Helvetica, Arial, sans-serif';
+    el.style.fontWeight = (f.font && f.font.includes('Bold')) ? '700' : '400';
+
+    // Position
+    const cx = pdfXtoCanvasX(f.x);
+    const cy = pdfYtoCanvasY(f.y);
+
+    el.style.top = cy + 'px';
+
+    if (f.align === 'center') {
+      el.style.left = cx + 'px';
+      el.style.transform = 'translateX(-50%)';
+    } else if (f.align === 'right') {
+      el.style.left = cx + 'px';
+      el.style.transform = 'translateX(-100%)';
+    } else {
+      el.style.left = cx + 'px';
+    }
+
+    // Drag events
+    el.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      selectField(f.key);
+      pushUndo();
+      dragging = {
+        key: f.key,
+        startX: e.clientX,
+        startY: e.clientY,
+        origPdfX: f.x,
+        origPdfY: f.y
+      };
+    });
+
+    canvasContainer.appendChild(el);
+  }
+}
+
+function selectField(key) {
+  selectedKey = key;
+  renderOverlays();
+  updateFieldList();
+  updatePropsPanel();
+}
+
+// ---- Field list ----
+function updateFieldList() {
+  fieldListEl.innerHTML = '';
+  for (const f of fields) {
+    const item = document.createElement('div');
+    item.className = 'field-item' + (f.key === selectedKey ? ' selected' : '');
+
+    const dot = document.createElement('span');
+    dot.className = 'dot ' + ((f.x !== undefined && f.y !== undefined) ? 'has-pos' : 'no-pos');
+    item.appendChild(dot);
+
+    item.appendChild(document.createTextNode(f.key));
+
+    item.addEventListener('click', () => {
+      selectField(f.key);
+    });
+
+    fieldListEl.appendChild(item);
+  }
+}
+
+// ---- Properties panel ----
+function updatePropsPanel() {
+  const f = fields.find(ff => ff.key === selectedKey);
+  if (!f) {
+    propsPanel.innerHTML = '<div class="no-selection">Select a field to edit properties</div>';
+    return;
+  }
+
+  propsPanel.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'props';
+
+  // X
+  wrap.appendChild(makePropRow('X', 'number', f.x, (v) => {
+    pushUndo();
+    f.x = snapToGrid(parseFloat(v));
+    renderOverlays();
+  }));
+
+  // Y
+  wrap.appendChild(makePropRow('Y', 'number', f.y, (v) => {
+    pushUndo();
+    f.y = snapToGrid(parseFloat(v));
+    renderOverlays();
+  }));
+
+  // fontSize
+  wrap.appendChild(makePropRow('Size', 'number', f.fontSize, (v) => {
+    pushUndo();
+    f.fontSize = parseFloat(v);
+    renderOverlays();
+  }, 0.5));
+
+  // align
+  const alignRow = document.createElement('div');
+  alignRow.className = 'prop-row';
+  const alignLabel = document.createElement('label');
+  alignLabel.textContent = 'Align';
+  alignRow.appendChild(alignLabel);
+  const alignSel = document.createElement('select');
+  ['left', 'center', 'right'].forEach(a => {
+    const opt = document.createElement('option');
+    opt.value = a;
+    opt.textContent = a;
+    if (a === f.align) opt.selected = true;
+    alignSel.appendChild(opt);
+  });
+  alignSel.addEventListener('change', () => {
+    pushUndo();
+    f.align = alignSel.value;
+    renderOverlays();
+  });
+  alignRow.appendChild(alignSel);
+  wrap.appendChild(alignRow);
+
+  // color
+  wrap.appendChild(makePropRow('Color', 'text', f.color, (v) => {
+    pushUndo();
+    f.color = v;
+    renderOverlays();
+  }));
+
+  propsPanel.appendChild(wrap);
+}
+
+function makePropRow(label, type, value, onChange, step) {
+  const row = document.createElement('div');
+  row.className = 'prop-row';
+
+  const lbl = document.createElement('label');
+  lbl.textContent = label;
+  row.appendChild(lbl);
+
+  const inp = document.createElement('input');
+  inp.type = type;
+  inp.value = (typeof value === 'number') ? Math.round(value * 100) / 100 : value;
+  if (step) inp.step = step;
+  if (type === 'number') inp.step = step || 1;
+
+  inp.addEventListener('input', () => {
+    onChange(inp.value);
+  });
+
+  row.appendChild(inp);
+  return row;
+}
+
+// ---- Canvas click to place ----
+canvasContainer.addEventListener('mousedown', (e) => {
+  // Only if clicking on the container itself (not on an overlay)
+  if (e.target !== pdfCanvas && e.target !== canvasContainer) return;
+
+  if (!selectedKey) return;
+
+  const rect = canvasContainer.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+
+  const pdfX = snapToGrid(canvasXtoPdfX(cx));
+  const pdfY = snapToGrid(canvasYtoPdfY(cy));
+
+  const f = fields.find(ff => ff.key === selectedKey);
+  if (f) {
+    pushUndo();
+    f.x = pdfX;
+    f.y = pdfY;
+    renderOverlays();
+    updatePropsPanel();
+  }
+});
+
+// ---- Mouse move for dragging and coord display ----
+document.addEventListener('mousemove', (e) => {
+  // Coord display
+  const rect = canvasContainer.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+
+  if (cx >= 0 && cy >= 0 && cx <= rect.width && cy <= rect.height) {
+    const pdfX = Math.round(canvasXtoPdfX(cx));
+    const pdfY = Math.round(canvasYtoPdfY(cy));
+    coordDisplay.style.display = 'block';
+    coordDisplay.textContent = 'PDF: ' + pdfX + ', ' + pdfY;
+  } else {
+    coordDisplay.style.display = 'none';
+  }
+
+  // Dragging
+  if (!dragging) return;
+
+  const dx = e.clientX - dragging.startX;
+  const dy = e.clientY - dragging.startY;
+
+  const newPdfX = snapToGrid(dragging.origPdfX + dx / scale);
+  const newPdfY = snapToGrid(dragging.origPdfY - dy / scale); // inverted Y
+
+  const f = fields.find(ff => ff.key === dragging.key);
+  if (f) {
+    f.x = newPdfX;
+    f.y = newPdfY;
+    renderOverlays();
+    updatePropsPanel();
+  }
+});
+
+document.addEventListener('mouseup', () => {
+  dragging = null;
+});
+
+// ---- Import / Export ----
+document.getElementById('btnImport').addEventListener('click', () => {
+  document.getElementById('importFileInput').click();
+});
+
+document.getElementById('importFileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    layout = data;
+    fields = parseLayout(data);
+    renderOverlays();
+    updateFieldList();
+    selectedKey = null;
+    updatePropsPanel();
+    undoStack = [];
+    redoStack = [];
+    toast('Layout imported');
+    setStatus('Imported: ' + file.name);
+  } catch (err) {
+    toast('Import error: ' + err.message);
+  }
+  e.target.value = '';
+});
+
+document.getElementById('btnExport').addEventListener('click', () => {
+  const data = buildLayoutJSON();
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'layout.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('layout.json exported');
+});
+
+// ---- Reference PDF ----
+document.getElementById('btnRefUpload').addEventListener('click', () => {
+  document.getElementById('refFileInput').click();
+});
+
+document.getElementById('refFileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) loadReference(file);
+  e.target.value = '';
+});
+
+document.getElementById('refOpacity').addEventListener('input', (e) => {
+  const val = e.target.value;
+  document.getElementById('refOpacityVal').textContent = val + '%';
+  refCanvas.style.opacity = val / 100;
+});
+
+// ---- Undo/Redo buttons ----
+document.getElementById('btnUndo').addEventListener('click', undo);
+document.getElementById('btnRedo').addEventListener('click', redo);
+
+// ---- Keyboard shortcuts ----
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'z' && (e.ctrlKey || e.metaKey) && e.shiftKey) {
+    e.preventDefault();
+    redo();
+  } else if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    undo();
+  } else if (e.key === 'Escape') {
+    selectedKey = null;
+    renderOverlays();
+    updateFieldList();
+    updatePropsPanel();
+  } else if (selectedKey && !e.target.matches('input, select')) {
+    const f = fields.find(ff => ff.key === selectedKey);
+    if (!f) return;
+    let moved = false;
+    const step = e.shiftKey ? 10 : 1;
+    if (e.key === 'ArrowUp')    { pushUndo(); f.y += step; moved = true; }
+    if (e.key === 'ArrowDown')  { pushUndo(); f.y -= step; moved = true; }
+    if (e.key === 'ArrowLeft')  { pushUndo(); f.x -= step; moved = true; }
+    if (e.key === 'ArrowRight') { pushUndo(); f.x += step; moved = true; }
+    if (moved) {
+      e.preventDefault();
+      f.x = snapToGrid(f.x);
+      f.y = snapToGrid(f.y);
+      renderOverlays();
+      updatePropsPanel();
+    }
+  }
+});
+
+// ---- Default layout (embedded) ----
+const DEFAULT_LAYOUT = {
+  "version": 1,
+  "template": "blank-template.pdf",
+  "page": { "width": 612, "height": 792 },
+  "info_boxes": {
+    "invoice_no":   { "x": 556, "y": 728, "fontSize": 9, "align": "center", "color": "#504A4A", "font": "Helvetica" },
+    "account_no":   { "x": 480, "y": 728, "fontSize": 9, "align": "center", "color": "#504A4A", "font": "Helvetica" },
+    "invoice_date": { "x": 556, "y": 688, "fontSize": 9, "align": "center", "color": "#504A4A", "font": "Helvetica" },
+    "po_number":    { "x": 520, "y": 640, "fontSize": 9, "align": "center", "color": "#504A4A", "font": "Helvetica" }
+  },
+  "client": {
+    "name":    { "x": 65, "y": 658, "fontSize": 10, "align": "left", "color": "#504A4A", "font": "Helvetica" },
+    "attn":    { "x": 65, "y": 646, "fontSize": 10, "align": "left", "color": "#504A4A", "font": "Helvetica" },
+    "addr1":   { "x": 65, "y": 634, "fontSize": 10, "align": "left", "color": "#504A4A", "font": "Helvetica" },
+    "jobcode": { "x": 65, "y": 622, "fontSize": 10, "align": "left", "color": "#504A4A", "font": "Helvetica" },
+    "city":    { "x": 65, "y": 610, "fontSize": 10, "align": "left", "color": "#504A4A", "font": "Helvetica" }
+  },
+  "grid": {
+    "row_start_y": 510,
+    "row_height": 37,
+    "reference_line_offset": 15,
+    "week_worked": { "x": 38, "y": 525, "fontSize": 9, "font": "HelveticaBold", "color": "#504A4A" },
+    "columns": {
+      "employee_name": { "x": 38, "align": "left" },
+      "week_ending":   { "x": 200, "align": "left" },
+      "assignment":    { "x": 310, "align": "left" },
+      "reg_label":     { "x": 395, "align": "left" },
+      "hours":         { "x": 465, "align": "right" },
+      "rate":          { "x": 520, "align": "right" },
+      "total":         { "x": 585, "align": "right" }
+    },
+    "fontSize": 9,
+    "color": "#504A4A",
+    "font": "Helvetica",
+    "reference": {
+      "fontSize": 7.5,
+      "color": "#999999",
+      "font": "Helvetica"
+    }
+  },
+  "footer": {
+    "total_due_value": { "x": 548, "y": 82, "fontSize": 11, "align": "center", "color": "#504A4A", "font": "HelveticaBold" },
+    "page_number":     { "x": 28, "y": 30, "fontSize": 7, "align": "left", "color": "#999999", "font": "Helvetica" }
+  },
+  "timesheet": {
+    "title": { "x": 38, "y": 525, "fontSize": 10, "font": "HelveticaBold", "color": "#504A4A" },
+    "employee_header": { "x": 38, "fontSize": 9, "font": "HelveticaBold", "color": "#504A4A" },
+    "client_header":   { "x": 310, "fontSize": 9, "font": "HelveticaBold", "color": "#504A4A" },
+    "grid_columns": [38, 110, 165, 220, 275, 330, 385, 440, 495, 560],
+    "grid_col_widths": [72, 55, 55, 55, 55, 55, 55, 55, 65],
+    "header_row_height": 16,
+    "data_row_height": 14,
+    "grid_font_size": 7.5,
+    "grid_border_width": 0.5,
+    "grid_border_color": "#CCCCCC"
+  }
+};
+
+// ---- Try to fetch layout.json, fall back to embedded default ----
+async function loadLayout() {
+  try {
+    const resp = await fetch('layout.json');
+    if (resp.ok) {
+      const data = await resp.json();
+      layout = data;
+      fields = parseLayout(data);
+      setStatus('layout.json loaded from server');
+    } else {
+      throw new Error('not found');
+    }
+  } catch {
+    layout = DEFAULT_LAYOUT;
+    fields = parseLayout(DEFAULT_LAYOUT);
+    setStatus('Using embedded default layout');
+  }
+  updateFieldList();
+  renderOverlays();
+}
+
+// ---- Init ----
+async function init() {
+  await renderTemplate();
+  await loadLayout();
+}
+
+init();
+</script>
+</body>
+</html>
