@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "template": "blank-template.pdf",
+  "page": { "width": 612, "height": 792 },
+
+  "info_boxes": {
+    "invoice_no":   { "x": 556, "y": 728, "fontSize": 9, "align": "center", "color": "#504A4A", "font": "Helvetica" },
+    "account_no":   { "x": 480, "y": 728, "fontSize": 9, "align": "center", "color": "#504A4A", "font": "Helvetica" },
+    "invoice_date": { "x": 556, "y": 688, "fontSize": 9, "align": "center", "color": "#504A4A", "font": "Helvetica" },
+    "po_number":    { "x": 520, "y": 640, "fontSize": 9, "align": "center", "color": "#504A4A", "font": "Helvetica" }
+  },
+
+  "client": {
+    "name":    { "x": 65, "y": 658, "fontSize": 10, "align": "left", "color": "#504A4A", "font": "Helvetica" },
+    "attn":    { "x": 65, "y": 646, "fontSize": 10, "align": "left", "color": "#504A4A", "font": "Helvetica" },
+    "addr1":   { "x": 65, "y": 634, "fontSize": 10, "align": "left", "color": "#504A4A", "font": "Helvetica" },
+    "jobcode": { "x": 65, "y": 622, "fontSize": 10, "align": "left", "color": "#504A4A", "font": "Helvetica" },
+    "city":    { "x": 65, "y": 610, "fontSize": 10, "align": "left", "color": "#504A4A", "font": "Helvetica" }
+  },
+
+  "grid": {
+    "row_start_y": 510,
+    "row_height": 37,
+    "reference_line_offset": 15,
+    "week_worked": { "x": 38, "y": 525, "fontSize": 9, "font": "HelveticaBold", "color": "#504A4A" },
+    "columns": {
+      "employee_name": { "x": 38, "align": "left" },
+      "week_ending":   { "x": 200, "align": "left" },
+      "assignment":    { "x": 310, "align": "left" },
+      "reg_label":     { "x": 395, "align": "left" },
+      "hours":         { "x": 465, "align": "right" },
+      "rate":          { "x": 520, "align": "right" },
+      "total":         { "x": 585, "align": "right" }
+    },
+    "fontSize": 9,
+    "color": "#504A4A",
+    "font": "Helvetica",
+    "reference": {
+      "fontSize": 7.5,
+      "color": "#999999",
+      "font": "Helvetica"
+    }
+  },
+
+  "footer": {
+    "total_due_value": { "x": 548, "y": 82, "fontSize": 11, "align": "center", "color": "#504A4A", "font": "HelveticaBold" },
+    "page_number":     { "x": 28, "y": 30, "fontSize": 7, "align": "left", "color": "#999999", "font": "Helvetica" }
+  },
+
+  "timesheet": {
+    "title": { "x": 38, "y": 525, "fontSize": 10, "font": "HelveticaBold", "color": "#504A4A" },
+    "employee_header": { "x": 38, "fontSize": 9, "font": "HelveticaBold", "color": "#504A4A" },
+    "client_header":   { "x": 310, "fontSize": 9, "font": "HelveticaBold", "color": "#504A4A" },
+    "grid_columns": [38, 110, 165, 220, 275, 330, 385, 440, 495, 560],
+    "grid_col_widths": [72, 55, 55, 55, 55, 55, 55, 55, 65],
+    "header_row_height": 16,
+    "data_row_height": 14,
+    "grid_font_size": 7.5,
+    "grid_border_width": 0.5,
+    "grid_border_color": "#CCCCCC"
+  }
+}
