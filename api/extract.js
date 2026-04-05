@@ -44,24 +44,25 @@ For FACE pages, extract ALL employees as an array:
       "employee_name": "LAST, FIRST",
       "job_title": "...",
       "assignment": "Payroll",
-      "hours": 40,
-      "bill_rate": 25.00,
-      "pay_rate": 18.00,
-      "line_total": 1000.00
+      "hours": "40.00",
+      "bill_rate": "25.00",
+      "pay_rate": "18.00",
+      "line_total": "1000.00"
     },
     {
       "employee_name": "LAST2, FIRST2",
       "job_title": "...",
       "assignment": "Payroll",
-      "hours": 35,
-      "bill_rate": 22.75,
-      "pay_rate": 17.50,
-      "line_total": 796.25
+      "hours": "35.00",
+      "bill_rate": "22.75",
+      "pay_rate": "17.50",
+      "line_total": "796.25"
     }
   ]
 }
 
 IMPORTANT for face pages:
+- Return hours, bill_rate, pay_rate, and line_total as STRINGS preserving the exact decimal format shown on the document (e.g., "40.00", "4.0", "25.00", "1000.00"). Do NOT drop trailing zeros.
 - Extract EVERY employee row you see. Do NOT skip any.
 - Each row typically shows: employee name, week ending, assignment (usually "Payroll"), a type indicator like "Reg", hours, bill rate, and total.
 - The pay rate is often in a reference line below the employee row in brackets, like "[ Invoice Reference: Job Title $17.50]"
@@ -204,9 +205,13 @@ If week_ending not found, use: "${week_ending || ""}".`;
         job_title: emp.job_title || emp.title || null,
         assignment: emp.assignment || "Payroll",
         hours: parseFloat(emp.hours) || 0,
+        hours_display: String(emp.hours ?? "0"),
         bill_rate: parseFloat(emp.bill_rate) || 0,
+        bill_rate_display: String(emp.bill_rate ?? "0"),
         pay_rate: parseFloat(emp.pay_rate) || 0,
-        line_total: parseFloat(emp.line_total) || 0
+        pay_rate_display: String(emp.pay_rate ?? "0"),
+        line_total: parseFloat(emp.line_total) || 0,
+        line_total_display: String(emp.line_total ?? "0")
       }));
       // Coerce page-level fields
       parsed.invoice_no = parsed.invoice_no || null;

@@ -473,10 +473,16 @@ async function startParsing(){
           const empHours = parseFloat(emp.hours)||0;
           const empBillRate = parseFloat(emp.bill_rate)||0;
           const empPayRate = parseFloat(emp.pay_rate)||0;
+          // Preserve display strings from extraction
+          const empHoursDisplay = emp.hours_display || String(emp.hours ?? '');
+          const empBillRateDisplay = emp.bill_rate_display || String(emp.bill_rate ?? '');
+          const empPayRateDisplay = emp.pay_rate_display || String(emp.pay_rate ?? '');
+          let empLineTotalDisplay = emp.line_total_display || String(emp.line_total ?? '');
           // Use extracted line_total if available, otherwise calculate
           let empLineTotal = parseFloat(emp.line_total)||0;
           if(empLineTotal===0 && empHours>0 && empBillRate>0){
             empLineTotal = empHours * empBillRate;
+            empLineTotalDisplay = empLineTotal.toFixed(2);
           }
 
           invoices.push({
@@ -499,9 +505,13 @@ async function startParsing(){
             job_title:emp.job_title||emp.title||'',
             assignment:emp.assignment||'Payroll',
             hours:empHours,
+            hours_display:empHoursDisplay,
             bill_rate:empBillRate,
+            bill_rate_display:empBillRateDisplay,
             pay_rate:empPayRate,
+            pay_rate_display:empPayRateDisplay,
             line_total:empLineTotal,
+            line_total_display:empLineTotalDisplay,
             // Confidence based on actual values
             confidence:{
               employee_name:empName?'high':'low',
@@ -804,7 +814,9 @@ function updTS(i,di,key,val){
     const totalReg=grid.reduce((s,d)=>s+(parseFloat(d.reg)||0),0);
     const totalOt=grid.reduce((s,d)=>s+(parseFloat(d.ot)||0),0);
     const totalDt=grid.reduce((s,d)=>s+(parseFloat(d.dt)||0),0);
-    invoices[i].hours=(totalReg+totalOt+totalDt).toFixed(2);
+    const totalHrs=(totalReg+totalOt+totalDt).toFixed(2);
+    invoices[i].hours=totalHrs;
+    invoices[i].hours_display=totalHrs;
     recalc(i);
     // Update total column cells in-place instead of re-rendering all cards
     const card=document.getElementById('c'+i);
@@ -848,6 +860,11 @@ function populateClientPanel(){
 
 function upd(i,key,val){
   invoices[i][key]=val;
+  // Keep display strings in sync when user edits numeric fields
+  if(key==='hours')invoices[i].hours_display=val;
+  else if(key==='bill_rate')invoices[i].bill_rate_display=val;
+  else if(key==='pay_rate')invoices[i].pay_rate_display=val;
+  else if(key==='line_total')invoices[i].line_total_display=val;
   const card=document.getElementById('c'+i);
   if(card){
     card.querySelector('.name').textContent=invoices[i].employee_name||'(unknown)';
@@ -862,8 +879,8 @@ function recalc(i){
   const h=parseFloat(invoices[i].hours)||0;
   const r=parseFloat(invoices[i].bill_rate)||0;
   const newTotal=(h*r).toFixed(2);
-  // Only auto-recalc if hours or rate changed meaningfully
   invoices[i].line_total=newTotal;
+  invoices[i].line_total_display=newTotal;
   const card=document.getElementById('c'+i);
   if(card){
     card.querySelectorAll('.fg').forEach(fg=>{
@@ -1161,11 +1178,11 @@ async function doConsolidate(){
           page.drawText(emp.week_ending||'',           {x:195,y:ey,size:9,font,color:CHARCOAL});
           page.drawText(emp.assignment||'Payroll',     {x:300,y:ey,size:9,font,color:CHARCOAL});
           page.drawText('Reg',                         {x:385,y:ey,size:9,font,color:CHARCOAL});
-          rgt(page,String(emp.hours||''),          458,ey,9,font,CHARCOAL);
-          rgt(page,fmt(emp.bill_rate),             510,ey,9,font,CHARCOAL);
-          rgt(page,fmt(emp.line_total),            572,ey,9,font,CHARCOAL);
+          rgt(page,emp.hours_display||String(emp.hours||''),458,ey,9,font,CHARCOAL);
+          rgt(page,'$'+(emp.bill_rate_display||String(emp.bill_rate||'0')),510,ey,9,font,CHARCOAL);
+          rgt(page,'$'+(emp.line_total_display||String(emp.line_total||'0')),572,ey,9,font,CHARCOAL);
           ey-=15;
-          const ref=`[ Invoice Reference:${emp.job_title||''} $${emp.pay_rate||''}]`;
+          const ref=`[ Invoice Reference:${emp.job_title||''} $${emp.pay_rate_display||emp.pay_rate||''}]`;
           page.drawText(ref,{x:36,y:ey,size:7.5,font,color:GREY});
           ey-=22;
         });
