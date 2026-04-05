@@ -1096,23 +1096,17 @@ async function doConsolidate(){
         const path=`M 0 0 L ${w} 0 L ${w} ${h-r} Q ${w} ${h} ${w-r} ${h} L ${r} ${h} Q 0 ${h} 0 ${h-r} L 0 0 Z`;
         page.drawSvgPath(path,{x:px,y:py+h,color});
       }
-      // Rounded border outline only (no fill)
+      // Rounded border outline only (no fill — opacity:0 makes fill transparent)
       function drawRoundedBorder(page, px, py, w, h, r, bColor, bWidth){
         const path=`M ${r} 0 L ${w-r} 0 Q ${w} 0 ${w} ${r} L ${w} ${h-r} Q ${w} ${h} ${w-r} ${h} L ${r} ${h} Q 0 ${h} 0 ${h-r} L 0 ${r} Q 0 0 ${r} 0 Z`;
-        page.drawSvgPath(path,{x:px,y:py+h,borderColor:bColor,borderWidth:bWidth});
+        page.drawSvgPath(path,{x:px,y:py+h,borderColor:bColor,borderWidth:bWidth,opacity:0});
       }
 
       function drawHeader(page){
-        // Globe logo — centered above TALENTHUB text
-        const logoW=40,logoH=40;
-        page.drawImage(logoImg,{x:52,y:H-38,width:logoW,height:logoH});
-        // TALENT + HUB — Times-Bold 22pt, positioned below globe
-        const tw=fontTB.widthOfTextAtSize('TALENT',22);
-        page.drawText('TALENT',{x:20,y:H-60,size:22,font:fontTB,color:CHARCOAL});
-        page.drawText('HUB',   {x:20+tw,y:H-60,size:22,font:fontTB,color:GREEN});
-        // Subtitle
-        page.drawText('W o r k f o r c e   I n c .',{x:23,y:H-76,size:9,font,color:CHARCOAL});
-        // Address block — positioned to the right
+        // Full branding logo (globe + TALENTHUB + Workforce Inc.) — original is 1196x331
+        const logoW=150, logoH=150*(331/1196); // ~41pt tall, preserving aspect ratio
+        page.drawImage(logoImg,{x:16,y:H-80,width:logoW,height:logoH});
+        // Address block — positioned to the right of logo
         const ax=200;
         // "295 Madison Avenue, 12th Floor" with superscript "th"
         const pre='295 Madison Avenue, 12';
@@ -1222,16 +1216,16 @@ async function doConsolidate(){
       }
 
       function drawTotalDueBox(page, amount){
-        const by=H-695, bh=35, ir=8;
+        const by=H-650, bh=30, ir=8;
         // "TOTAL DUE" text to the left — bold charcoal
-        const labelX=370;
-        page.drawText('TOTAL DUE',{x:labelX,y:by+11,size:12,font:fontBold,color:CHARCOAL});
+        const labelX=380;
+        page.drawText('TOTAL DUE',{x:labelX,y:by+9,size:11,font:fontBold,color:CHARCOAL});
         // Rounded mint value box to the right
         const vbx=470, vbw=110;
         drawRoundedRect(page, vbx, by, vbw, bh, ir, MINT);
         drawRoundedBorder(page, vbx, by, vbw, bh, ir, GBORDER, 1);
         // Amount centered in value box
-        ctr(page, fmt(amount), vbx+vbw/2, by+11, 12, fontBold, CHARCOAL);
+        ctr(page, fmt(amount), vbx+vbw/2, by+9, 11, fontBold, CHARCOAL);
       }
 
       function drawFooter(page, pageNum, totalPages, showTotal, totalAmount){
