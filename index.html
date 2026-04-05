@@ -1059,11 +1059,9 @@ async function doConsolidate(){
       // Page dimensions from spec
       const W=594.635, H=774.635;
 
-      // Background + Logo
+      // Background
       const bgBytes=Uint8Array.from(atob(BG_B64),c=>c.charCodeAt(0));
       const bgImg=await pdfDoc.embedJpg(bgBytes);
-      const logoBytes=Uint8Array.from(atob(LOGO_B64),c=>c.charCodeAt(0));
-      const logoImg=await pdfDoc.embedJpg(logoBytes);
 
       // ── HELPERS ──────────────────────────────────────────────
       function addPage(){
@@ -1103,10 +1101,13 @@ async function doConsolidate(){
       }
 
       function drawHeader(page){
-        // Full branding logo (globe + TALENTHUB + Workforce Inc.) — original is 1196x331
-        const logoW=150, logoH=150*(331/1196); // ~41pt tall, preserving aspect ratio
-        page.drawImage(logoImg,{x:16,y:H-80,width:logoW,height:logoH});
-        // Address block — positioned to the right of logo
+        // TALENT + HUB — Times-Bold 22pt
+        const tw=fontTB.widthOfTextAtSize('TALENT',22);
+        page.drawText('TALENT',{x:20,y:H-55,size:22,font:fontTB,color:CHARCOAL});
+        page.drawText('HUB',   {x:20+tw,y:H-55,size:22,font:fontTB,color:GREEN});
+        // Subtitle
+        page.drawText('W o r k f o r c e   I n c .',{x:23,y:H-72,size:9,font,color:CHARCOAL});
+        // Address block
         const ax=200;
         // "295 Madison Avenue, 12th Floor" with superscript "th"
         const pre='295 Madison Avenue, 12';
