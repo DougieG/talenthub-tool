@@ -1081,10 +1081,25 @@ async function doConsolidate(){
         page.drawText(text,{x:rx-w,y,size,font:f,color});
       }
 
-      // Rounded rectangle helper using SVG path with quadratic bezier corners
+      // Rounded rectangle helpers using SVG path with quadratic bezier corners
       function drawRoundedRect(page, px, py, w, h, r, color){
         const path=`M ${r} 0 L ${w-r} 0 Q ${w} 0 ${w} ${r} L ${w} ${h-r} Q ${w} ${h} ${w-r} ${h} L ${r} ${h} Q 0 ${h} 0 ${h-r} L 0 ${r} Q 0 0 ${r} 0 Z`;
         page.drawSvgPath(path,{x:px,y:py+h,color});
+      }
+      // Top corners rounded, bottom corners sharp
+      function drawTopRoundedRect(page, px, py, w, h, r, color){
+        const path=`M ${r} 0 L ${w-r} 0 Q ${w} 0 ${w} ${r} L ${w} ${h} L 0 ${h} L 0 ${r} Q 0 0 ${r} 0 Z`;
+        page.drawSvgPath(path,{x:px,y:py+h,color});
+      }
+      // Bottom corners rounded, top corners sharp
+      function drawBottomRoundedRect(page, px, py, w, h, r, color){
+        const path=`M 0 0 L ${w} 0 L ${w} ${h-r} Q ${w} ${h} ${w-r} ${h} L ${r} ${h} Q 0 ${h} 0 ${h-r} L 0 0 Z`;
+        page.drawSvgPath(path,{x:px,y:py+h,color});
+      }
+      // Rounded border outline only (no fill)
+      function drawRoundedBorder(page, px, py, w, h, r, bColor, bWidth){
+        const path=`M ${r} 0 L ${w-r} 0 Q ${w} 0 ${w} ${r} L ${w} ${h-r} Q ${w} ${h} ${w-r} ${h} L ${r} ${h} Q 0 ${h} 0 ${h-r} L 0 ${r} Q 0 0 ${r} 0 Z`;
+        page.drawSvgPath(path,{x:px,y:py+h,borderColor:bColor,borderWidth:bWidth});
       }
 
       function drawHeader(page){
@@ -1113,40 +1128,38 @@ async function doConsolidate(){
         page.drawText('+1 (646) 682-7424',{x:ax+10,y:H-71,size:8,font,color:CHARCOAL});
       }
 
-      function drawInfoBoxes(page, invoiceNo, invoiceDate, jobCode){
+      function drawInfoBoxes(page, invoiceNo, accountNo, invoiceDate, jobCode){
         // Spec: bx=490, bw=95, label_h=16, value_h=24
-        const bx=490, bw=95, lh=16, vh=24;
+        const bx=490, bw=95, lh=16, vh=24, ir=8;
 
         function infoBox(y, label, value){
-          const ir=4; // corner radius for info boxes
-          // Charcoal label bar — rounded top corners
-          drawRoundedRect(page, bx, y-lh, bw, lh, ir, CHARCOAL);
-          // Mint value area — rounded bottom corners
-          drawRoundedRect(page, bx, y-lh-vh, bw, vh, ir, MINT);
-          // Green border around whole
-          page.drawRectangle({x:bx, y:y-lh-vh-2, width:bw, height:lh+vh+6,
-            borderColor:GBORDER, borderWidth:0.75});
+          // Charcoal label bar — rounded TOP corners only, sharp bottom
+          drawTopRoundedRect(page, bx, y-lh, bw, lh, ir, CHARCOAL);
+          // Mint value area — rounded BOTTOM corners only, sharp top
+          drawBottomRoundedRect(page, bx, y-lh-vh, bw, vh, ir, MINT);
+          // Green border around whole — fully rounded
+          drawRoundedBorder(page, bx-1, y-lh-vh-1, bw+2, lh+vh+2, ir, GBORDER, 1);
           // Label (centered)
           ctr(page, label, bx+bw/2, y-lh+5, 7, fontBold, WHITE);
           // Value (centered)
           ctr(page, value||'', bx+bw/2, y-lh-vh+8, 9, font, CHARCOAL);
         }
 
+        const spacing=lh+vh+8;
         const by=H-38;
         infoBox(by, 'INVOICE NO.', invoiceNo);
-        const dy=by-lh-vh-18;
-        infoBox(dy, 'INVOICE DATE', invoiceDate);
-        // P.O. NUMBER — wider box below with mint value area (matches reference)
-        const py=dy-lh-vh-18;
+        infoBox(by-spacing, 'ACCOUNT NO.', accountNo);
+        infoBox(by-spacing*2, 'INVOICE DATE', invoiceDate);
+
+        // P.O. NUMBER — wider box below
+        const py=by-spacing*3;
         const pw=140, px=bx+bw-pw;
-        const pvh=30; // taller value area for P.O. NUMBER
-        const pir=4;
-        drawRoundedRect(page, px, py-16, pw, 16, pir, CHARCOAL);
-        drawRoundedRect(page, px, py-16-pvh, pw, pvh, pir, MINT);
-        page.drawRectangle({x:px, y:py-16-pvh-2, width:pw, height:16+pvh+6,
-          borderColor:GBORDER, borderWidth:0.75});
+        const pvh=24;
+        drawTopRoundedRect(page, px, py-lh, pw, lh, ir, CHARCOAL);
+        drawBottomRoundedRect(page, px, py-lh-pvh, pw, pvh, ir, MINT);
+        drawRoundedBorder(page, px-1, py-lh-pvh-1, pw+2, lh+pvh+2, ir, GBORDER, 1);
         ctr(page, 'P.O. NUMBER', px+pw/2, py-12, 7, fontBold, WHITE);
-        if(jobCode) ctr(page, jobCode, px+pw/2, py-16-pvh+10, 9, font, CHARCOAL);
+        if(jobCode) ctr(page, jobCode, px+pw/2, py-lh-pvh+8, 9, font, CHARCOAL);
       }
 
       function drawClientBlock(page, name, num, attn, addr1, addr2, city, jobCode){
@@ -1209,13 +1222,16 @@ async function doConsolidate(){
       }
 
       function drawTotalDueBox(page, amount){
-        // spec: x=415, y=TH_H-695, w=160, h=35, divider at +90
-        const bx=415, by=H-695, bw=160, bh=35;
-        page.drawRectangle({x:bx,y:by,width:bw,height:bh,
-          borderColor:GBORDER,borderWidth:1});
-        page.drawLine({start:{x:bx+90,y:by},end:{x:bx+90,y:by+bh},thickness:1,color:GBORDER});
-        ctr(page,'TOTAL DUE', bx+45,    by+12, 12, fontBold, CHARCOAL);
-        ctr(page,fmt(amount), bx+90+35, by+12, 12, fontBold, CHARCOAL);
+        const by=H-695, bh=35, ir=8;
+        // "TOTAL DUE" text to the left — bold charcoal
+        const labelX=370;
+        page.drawText('TOTAL DUE',{x:labelX,y:by+11,size:12,font:fontBold,color:CHARCOAL});
+        // Rounded mint value box to the right
+        const vbx=470, vbw=110;
+        drawRoundedRect(page, vbx, by, vbw, bh, ir, MINT);
+        drawRoundedBorder(page, vbx, by, vbw, bh, ir, GBORDER, 1);
+        // Amount centered in value box
+        ctr(page, fmt(amount), vbx+vbw/2, by+11, 12, fontBold, CHARCOAL);
       }
 
       function drawFooter(page, pageNum, totalPages, showTotal, totalAmount){
@@ -1237,6 +1253,7 @@ async function doConsolidate(){
 
       // ── BUILD PDF ─────────────────────────────────────────────
       const invoiceNo   = emps[0].invoice_no   || '';
+      const accountNo   = emps[0].account_no  || '';
       const invoiceDate = emps[0].invoice_date || '';
       const weekWorked  = emps[0].week_ending  || '';
 
@@ -1249,7 +1266,7 @@ async function doConsolidate(){
       // === FACE PAGE ===
       const fp=addPage();
       drawHeader(fp);
-      drawInfoBoxes(fp, invoiceNo, invoiceDate, code);
+      drawInfoBoxes(fp, invoiceNo, accountNo, invoiceDate, code);
       drawClientBlock(fp, ciName, ciNum, ciAttn, ciAddr1, ciAddr2, ciCity, code);
       drawTableHeader(fp);
       const grandTotal=drawEmployeeRows(fp, emps, weekWorked);
@@ -1266,7 +1283,7 @@ async function doConsolidate(){
           const isLastPage=(pageNum===totalPages);
           const tp=addPage();
           drawHeader(tp);
-          drawInfoBoxes(tp, invoiceNo, invoiceDate, code);
+          drawInfoBoxes(tp, invoiceNo, accountNo, invoiceDate, code);
           drawClientBlock(tp, ciName, ciNum, ciAttn, ciAddr1, ciAddr2, ciCity, code);
           drawTableHeader(tp);
 
