@@ -1059,9 +1059,11 @@ async function doConsolidate(){
       // Page dimensions from spec
       const W=594.635, H=774.635;
 
-      // Background
+      // Background + Logo
       const bgBytes=Uint8Array.from(atob(BG_B64),c=>c.charCodeAt(0));
       const bgImg=await pdfDoc.embedJpg(bgBytes);
+      const logoBytes=Uint8Array.from(atob(LOGO_B64),c=>c.charCodeAt(0));
+      const logoImg=await pdfDoc.embedJpg(logoBytes);
 
       // ── HELPERS ──────────────────────────────────────────────
       function addPage(){
@@ -1079,16 +1081,31 @@ async function doConsolidate(){
         page.drawText(text,{x:rx-w,y,size,font:f,color});
       }
 
+      // Rounded rectangle helper using SVG path with quadratic bezier corners
+      function drawRoundedRect(page, px, py, w, h, r, color){
+        const path=`M ${r} 0 L ${w-r} 0 Q ${w} 0 ${w} ${r} L ${w} ${h-r} Q ${w} ${h} ${w-r} ${h} L ${r} ${h} Q 0 ${h} 0 ${h-r} L 0 ${r} Q 0 0 ${r} 0 Z`;
+        page.drawSvgPath(path,{x:px,y:py+h,color});
+      }
+
       function drawHeader(page){
-        // TALENT + HUB — Times-Bold 22pt
+        // Globe logo — centered above TALENTHUB text
+        const logoW=40,logoH=40;
+        page.drawImage(logoImg,{x:52,y:H-38,width:logoW,height:logoH});
+        // TALENT + HUB — Times-Bold 22pt, positioned below globe
         const tw=fontTB.widthOfTextAtSize('TALENT',22);
-        page.drawText('TALENT',{x:20,y:H-55,size:22,font:fontTB,color:CHARCOAL});
-        page.drawText('HUB',   {x:20+tw,y:H-55,size:22,font:fontTB,color:GREEN});
+        page.drawText('TALENT',{x:20,y:H-60,size:22,font:fontTB,color:CHARCOAL});
+        page.drawText('HUB',   {x:20+tw,y:H-60,size:22,font:fontTB,color:GREEN});
         // Subtitle
-        page.drawText('W o r k f o r c e   I n c .',{x:23,y:H-72,size:9,font,color:CHARCOAL});
-        // Address block — x=170
-        const ax=170;
-        page.drawText('295 Madison Avenue, 12th Floor',{x:ax,y:H-38,size:8,font,color:CHARCOAL});
+        page.drawText('W o r k f o r c e   I n c .',{x:23,y:H-76,size:9,font,color:CHARCOAL});
+        // Address block — positioned to the right
+        const ax=200;
+        // "295 Madison Avenue, 12th Floor" with superscript "th"
+        const pre='295 Madison Avenue, 12';
+        page.drawText(pre,{x:ax,y:H-38,size:8,font,color:CHARCOAL});
+        const preW=font.widthOfTextAtSize(pre,8);
+        page.drawText('th',{x:ax+preW,y:H-35,size:5,font,color:CHARCOAL});
+        const thW=font.widthOfTextAtSize('th',5);
+        page.drawText(' Floor',{x:ax+preW+thW,y:H-38,size:8,font,color:CHARCOAL});
         page.drawText('New York, NY 10017',            {x:ax,y:H-49,size:8,font,color:CHARCOAL});
         page.drawText('T.',{x:ax,y:H-60,size:8,font:fontBold,color:GREEN});
         page.drawText('+1 (646) 682-9692',{x:ax+10,y:H-60,size:8,font,color:CHARCOAL});
@@ -1101,10 +1118,11 @@ async function doConsolidate(){
         const bx=490, bw=95, lh=16, vh=24;
 
         function infoBox(y, label, value){
-          // Charcoal label bar
-          page.drawRectangle({x:bx, y:y-lh, width:bw, height:lh, color:CHARCOAL});
-          // Mint value area
-          page.drawRectangle({x:bx, y:y-lh-vh, width:bw, height:vh, color:MINT});
+          const ir=4; // corner radius for info boxes
+          // Charcoal label bar — rounded top corners
+          drawRoundedRect(page, bx, y-lh, bw, lh, ir, CHARCOAL);
+          // Mint value area — rounded bottom corners
+          drawRoundedRect(page, bx, y-lh-vh, bw, vh, ir, MINT);
           // Green border around whole
           page.drawRectangle({x:bx, y:y-lh-vh-2, width:bw, height:lh+vh+6,
             borderColor:GBORDER, borderWidth:0.75});
@@ -1122,8 +1140,9 @@ async function doConsolidate(){
         const py=dy-lh-vh-18;
         const pw=140, px=bx+bw-pw;
         const pvh=30; // taller value area for P.O. NUMBER
-        page.drawRectangle({x:px, y:py-16, width:pw, height:16, color:CHARCOAL});
-        page.drawRectangle({x:px, y:py-16-pvh, width:pw, height:pvh, color:MINT});
+        const pir=4;
+        drawRoundedRect(page, px, py-16, pw, 16, pir, CHARCOAL);
+        drawRoundedRect(page, px, py-16-pvh, pw, pvh, pir, MINT);
         page.drawRectangle({x:px, y:py-16-pvh-2, width:pw, height:16+pvh+6,
           borderColor:GBORDER, borderWidth:0.75});
         ctr(page, 'P.O. NUMBER', px+pw/2, py-12, 7, fontBold, WHITE);
@@ -1148,14 +1167,14 @@ async function doConsolidate(){
       }
 
       function drawTableHeader(page){
-        // spec: bar_y=532, bar_h=32
-        const barY=532, barH=32;
-        // Main bar (EMPLOYEE NAME through ASSIGNMENT)
-        page.drawRectangle({x:24,  y:barY, width:384, height:barH, color:CHARCOAL});
-        // Separate tabs
-        page.drawRectangle({x:418, y:barY, width:55,  height:barH, color:CHARCOAL});
-        page.drawRectangle({x:478, y:barY, width:45,  height:barH, color:CHARCOAL});
-        page.drawRectangle({x:528, y:barY, width:52,  height:barH, color:CHARCOAL});
+        // spec: bar_y=532, bar_h=32, rounded corners r=5
+        const barY=532, barH=32, r=5;
+        // Main bar (EMPLOYEE NAME through ASSIGNMENT) — rounded
+        drawRoundedRect(page, 24, barY, 384, barH, r, CHARCOAL);
+        // Separate tabs — each rounded
+        drawRoundedRect(page, 418, barY, 55, barH, r, CHARCOAL);
+        drawRoundedRect(page, 478, barY, 45, barH, r, CHARCOAL);
+        drawRoundedRect(page, 528, barY, 52, barH, r, CHARCOAL);
         const ty=barY+10;
         page.drawText('EMPLOYEE NAME',{x:36, y:ty,size:7.5,font:fontBold,color:WHITE});
         page.drawText('WEEK ENDING',  {x:195,y:ty,size:7.5,font:fontBold,color:WHITE});
