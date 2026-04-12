@@ -2113,7 +2113,7 @@ async function doConsolidate() {
         p.drawPage(templatePage);
         // White-out the ACCOUNT NO. label/box baked into the template
         p.drawRectangle({
-          x: 430, y: 715, width: 105, height: 48,
+          x: 418, y: 710, width: 120, height: 55,
           color: PDFLib.rgb(1, 1, 1),
           borderWidth: 0
         });
@@ -2413,7 +2413,8 @@ async function doConsolidate() {
           let curY = L.timesheet.title.y - 15;
           for (let ei = 0; ei < 2 && (tpi + ei) < emps.length; ei++) {
             const emp = emps[tpi + ei];
-            const tsClientName = ciNum ? ciName + ' #' + ciNum.replace(/^#/, '') : ciName;
+            const empNum = emp.client_number || ciNum || '';
+            const tsClientName = empNum ? ciName + ' #' + empNum.replace(/^#/, '') : ciName;
             curY = drawTimesheetGrid(tp, emp, curY, tsClientName);
             curY -= 20;
           }
