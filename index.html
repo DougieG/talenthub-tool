@@ -2113,7 +2113,7 @@ async function doConsolidate() {
         p.drawPage(templatePage);
         // White-out the ACCOUNT NO. label/box baked into the template
         p.drawRectangle({
-          x: 443, y: 723, width: 78, height: 32,
+          x: 430, y: 715, width: 105, height: 48,
           color: PDFLib.rgb(1, 1, 1),
           borderWidth: 0
         });
@@ -2328,7 +2328,6 @@ async function doConsolidate() {
       function drawInfoOnPage(page) {
         drawField(page, L.info_boxes.invoice_no, invoiceNo);
         drawField(page, L.info_boxes.invoice_date, invoiceDate);
-        drawField(page, L.info_boxes.po_number, code);
       }
 
       // Helper: draw client block on a page

@@ -80,7 +80,7 @@ IMPORTANT for face pages:
 - client_number is a separate numeric identifier for the client (e.g. "227" or "#227"), often shown next to or below the client name.
 - client_addr1 is the street address line (e.g. "22 CORTLANDT STREET").
 - client_city is the city/state/ZIP line (e.g. "NEW YORK, NY 10007").
-- attn_to is the attention/contact name, NOT the client number.
+- attn_to is the text from the "Attn To:" line on the invoice. This may be a person's name or a markup notation like "30% MARK UP". Extract it exactly as written.
 
 For TIMESHEET pages, extract ALL employee grids:
 {
@@ -152,8 +152,6 @@ CRITICAL - Employee completeness: You MUST extract EVERY employee row on the pag
 - Stopping after a few employees when there are more below
 - Skipping employees with unusual names or formatting
 If a page has 5 employee rows, your employees array MUST have exactly 5 entries.
-
-CRITICAL - attn_to field: The "Attn To" line should contain a person's name (e.g. "JOHN SMITH") or be null if no person is listed. Do NOT put markup percentages like "30% MARK UP" in attn_to. That markup text belongs in client_number if present. If the only text in the Attn line is a percentage markup, set attn_to to null and put the markup text in client_number.
 
 CRITICAL - Numeric values: Return ALL numeric values (hours, bill_rate, pay_rate, line_total) as plain strings WITHOUT commas (e.g. "1000.00" not "1,000.00"). Preserve decimal places as shown on the document.
 
