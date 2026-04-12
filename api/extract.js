@@ -44,6 +44,8 @@ For FACE pages, extract ALL employees as an array:
   "client_name": "...",
   "client_number": "...",
   "attn_to": "...",
+  "client_addr1": "...",
+  "client_city": "...",
   "week_ending": "MM/DD/YYYY",
   "employees": [
     {
@@ -74,6 +76,11 @@ IMPORTANT for face pages:
 - The pay rate is often in a reference line below the employee row in brackets, like "[ Invoice Reference: Job Title $17.50]"
 - The job_title is also in that reference line.
 - bill_rate and pay_rate are DIFFERENT numbers. bill_rate is the higher rate shown in the main table. pay_rate is the lower rate shown in the reference line.
+- client_name is ONLY the organization/company name (e.g. "FUND FOR PUBLIC HEALTH"). Do NOT include any numbers, codes, or identifiers like "#227" in the client_name.
+- client_number is a separate numeric identifier for the client (e.g. "227" or "#227"), often shown next to or below the client name.
+- client_addr1 is the street address line (e.g. "22 CORTLANDT STREET").
+- client_city is the city/state/ZIP line (e.g. "NEW YORK, NY 10007").
+- attn_to is the attention/contact name, NOT the client number.
 
 For TIMESHEET pages, extract ALL employee grids:
 {
@@ -227,6 +234,8 @@ If week_ending not found, use: "${week_ending || ""}".`;
       parsed.client_name = parsed.client_name || null;
       parsed.client_number = parsed.client_number || null;
       parsed.attn_to = parsed.attn_to || null;
+      parsed.client_addr1 = parsed.client_addr1 || null;
+      parsed.client_city = parsed.client_city || null;
       parsed.week_ending = parsed.week_ending || null;
     }
 

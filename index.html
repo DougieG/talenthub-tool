@@ -1371,6 +1371,8 @@ async function startParsing() {
             client_name: r.client_name || '',
             client_number: r.client_number || '',
             attn_to: r.attn_to || '',
+            client_addr1: r.client_addr1 || '',
+            client_city: r.client_city || '',
             week_ending: r.week_ending || weFmt,
             // Employee-level fields
             employee_name: empName,
@@ -1654,6 +1656,8 @@ function emptyInvoice() {
     line_total_display: '',
     client_name: '',
     client_number: '',
+    client_addr1: '',
+    client_city: '',
     account_no: '',
     invoice_no: '',
     invoice_date: '',
@@ -1907,6 +1911,8 @@ function addBlankInvoice() {
   if (invoices.length > 0) {
     inv.client_name = invoices[0].client_name;
     inv.client_number = invoices[0].client_number;
+    inv.client_addr1 = invoices[0].client_addr1;
+    inv.client_city = invoices[0].client_city;
     inv.week_ending = invoices[0].week_ending;
     inv.invoice_date = invoices[0].invoice_date;
     inv.account_no = invoices[0].account_no;
@@ -2057,8 +2063,8 @@ async function doConsolidate() {
     const ciName = document.getElementById('ci_name').value || invoices[0]?.client_name || '';
     const ciNum = document.getElementById('ci_num').value || '';
     const ciAttn = document.getElementById('ci_attn').value || '';
-    const ciAddr1 = document.getElementById('ci_addr1').value || '';
-    const ciCity = document.getElementById('ci_city').value || '';
+    const ciAddr1 = document.getElementById('ci_addr1').value || invoices[0]?.client_addr1 || '';
+    const ciCity = document.getElementById('ci_city').value || invoices[0]?.client_city || '';
 
     const zip = new JSZip();
     const codes = Object.keys(groups).sort();
