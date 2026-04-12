@@ -905,7 +905,7 @@ body {
       <p>Drop in the batch PDFs from TalentHub. The tool will extract all data for you to review and correct.</p>
       <div class="dz" id="dz">
         <input type="file" id="fi" multiple accept=".pdf">
-        <div class="dz-icon">  </div>
+        <div class="dz-icon">&#x1F4C4;</div>
         <div class="dz-label">Drop batch PDF files here or click to browse</div>
         <div class="dz-hint">Scanned batch invoices (e.g. CCE02152026_0002.pdf)</div>
       </div>
@@ -915,7 +915,7 @@ body {
         <input type="date" id="we">
       </div>
       <div style="margin-top:24px">
-        <button class="btn btn-p" id="parseBtn" disabled onclick="startParsing()">   Parse Invoices</button>
+        <button class="btn btn-p" id="parseBtn" disabled onclick="startParsing()">Parse Invoices</button>
       </div>
     </div>
   </div>
@@ -982,7 +982,7 @@ body {
 <!-- Lightbox -->
 <div class="lb" id="lb" onclick="closeLB()" role="dialog" aria-label="Page image viewer">
   <button onclick="event.stopPropagation();navLB(-1)" style="position:fixed;left:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.2);border:none;color:#fff;font-size:32px;padding:8px 14px;border-radius:8px;cursor:pointer" aria-label="Previous page">‹</button>
-  <img id="lbImg" onclick="event.stopPropagation()">
+  <img id="lbImg" alt="Invoice page preview" onclick="event.stopPropagation()">
   <button onclick="event.stopPropagation();navLB(1)" style="position:fixed;right:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.2);border:none;color:#fff;font-size:32px;padding:8px 14px;border-radius:8px;cursor:pointer" aria-label="Next page">›</button>
   <button onclick="closeLB()" style="position:fixed;top:16px;right:16px;background:rgba(255,255,255,.2);border:none;color:#fff;font-size:24px;padding:6px 12px;border-radius:8px;cursor:pointer" aria-label="Close viewer">✕</button>
   <span id="lbCounter" style="position:fixed;bottom:16px;left:50%;transform:translateX(-50%);color:#fff;font-size:13px;background:rgba(0,0,0,.5);padding:4px 12px;border-radius:4px"></span>
@@ -1992,6 +1992,7 @@ function exportJSON() {
     pay_rate: inv.pay_rate,
     line_total: inv.line_total,
     invoice_no: inv.invoice_no,
+    account_no: inv.account_no,
     invoice_date: inv.invoice_date,
     week_ending: inv.week_ending,
     assignment: inv.assignment,
