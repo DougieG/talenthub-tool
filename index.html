@@ -1098,7 +1098,7 @@ function fmt(v) {
 function esc(s) {
   const d = document.createElement('div');
   d.textContent = s || '';
-  return d.innerHTML
+  return d.innerHTML.replace(/"/g, '&quot;')
 }
 
 function showAlert(msg, type) {
@@ -1798,6 +1798,9 @@ function updTS(i, di, key, val) {
     // Update total column cells in-place instead of re-rendering all cards
     const card = document.getElementById('c' + i);
     if (card) {
+      // Sync the Hours input field in the card body with the new total
+      const hoursInput = card.querySelector('input[oninput*="\'hours\'"]');
+      if (hoursInput) hoursInput.value = totalHrs;
       const tsGrid = card.querySelector('.ts-grid');
       if (tsGrid) {
         const rows = tsGrid.querySelectorAll('tbody tr');
@@ -2149,7 +2152,7 @@ async function doConsolidate() {
         // Grid table
         const cols = TS.grid_columns;
         const colW = TS.grid_col_widths;
-        const gridW = cols[cols.length - 1] + colW[colW.length - 1] - cols[0];
+        const gridW = cols[cols.length - 1] - cols[0];
         const gridBorderColor = hexToRgb(TS.grid_border_color || '#CCCCCC');
         const gridFontSize = TS.grid_font_size;
         const borderWidth = TS.grid_border_width;
