@@ -943,7 +943,7 @@ body {
         <div class="stat">Total: <strong id="stTotal">$0</strong></div>
       </div>
     </div>
-    <div class="warn-banner">\u26A0\uFE0F <div><strong>OCR Notice:</strong> Data was extracted from scanned documents using AI. Fields marked with \u26A0 could not be read and need manual entry. <strong>Please verify all fields before consolidating.</strong></div></div>
+    <div class="warn-banner">&#x26A0;&#xFE0F; <div><strong>OCR Notice:</strong> Data was extracted from scanned documents using AI. Fields marked with &#x26A0; could not be read and need manual entry. <strong>Please verify all fields before consolidating.</strong></div></div>
     <div class="client-panel">
       <h3>Client Info — applies to all invoices</h3>
       <div class="fg">
@@ -951,7 +951,6 @@ body {
         <div><label>Client Number</label><input id="ci_num" oninput="setClientField('client_number',this.value)" placeholder="e.g. 30%"></div>
         <div><label>Attn To</label><input id="ci_attn" oninput="setClientField('attn_to',this.value)" placeholder="Attn To:"></div>
         <div><label>Address Line 1</label><input id="ci_addr1" oninput="setClientField('client_addr1',this.value)" placeholder="22 CORTLANDT STREET"></div>
-        <div><label>Address Line 2</label><input id="ci_addr2" oninput="setClientField('client_addr2',this.value)" placeholder="(Job code replaces this line)"></div>
         <div><label>City / State / ZIP</label><input id="ci_city" oninput="setClientField('client_city',this.value)" placeholder="New York, NY 10007"></div>
       </div>
     </div>
@@ -1127,7 +1126,6 @@ function saveState() {
           num: document.getElementById('ci_num')?.value || '',
           attn: document.getElementById('ci_attn')?.value || '',
           addr1: document.getElementById('ci_addr1')?.value || '',
-          addr2: document.getElementById('ci_addr2')?.value || '',
           city: document.getElementById('ci_city')?.value || ''
         },
         weekEnding: document.getElementById('we')?.value || '',
@@ -1177,7 +1175,6 @@ function restoreState(state) {
     document.getElementById('ci_num').value = state.client.num || '';
     document.getElementById('ci_attn').value = state.client.attn || '';
     document.getElementById('ci_addr1').value = state.client.addr1 || '';
-    document.getElementById('ci_addr2').value = state.client.addr2 || '';
     document.getElementById('ci_city').value = state.client.city || '';
   }
 }
@@ -1657,6 +1654,7 @@ function emptyInvoice() {
     line_total_display: '',
     client_name: '',
     client_number: '',
+    account_no: '',
     invoice_no: '',
     invoice_date: '',
     week_ending: '',
@@ -1717,6 +1715,7 @@ function renderCards() {
           ${fld(i,'line_total','Line Total ($)',inv.line_total,cf.line_total)}
           ${fld(i,'invoice_no','Invoice No.',inv.invoice_no)}
           ${fld(i,'invoice_date','Invoice Date',inv.invoice_date)}
+          ${fld(i,'account_no','Account No.',inv.account_no)}
         </div>
         <div class="fg" style="margin-top:8px">
           ${fld(i,'attn_to','Attn To',inv.attn_to)}
@@ -1802,7 +1801,6 @@ function updTS(i, di, key, val) {
       const tsGrid = card.querySelector('.ts-grid');
       if (tsGrid) {
         const rows = tsGrid.querySelectorAll('tbody tr');
-        const hourKeys = ['reg', 'ot', 'dt'];
         rows.forEach(row => {
           const cells = row.querySelectorAll('td');
           const label = cells[0]?.textContent?.trim();
@@ -1833,8 +1831,8 @@ function populateClientPanel() {
   document.getElementById('ci_name').value = first.client_name || '';
   document.getElementById('ci_num').value = first.client_number || '';
   document.getElementById('ci_attn').value = first.attn_to || '';
+  // addr1 and city are not extracted by AI — only populated from saved state
   document.getElementById('ci_addr1').value = first.client_addr1 || '';
-  document.getElementById('ci_addr2').value = first.client_addr2 || '';
   document.getElementById('ci_city').value = first.client_city || '';
 }
 
@@ -1904,9 +1902,11 @@ function addBlankInvoice() {
   inv.fileIdx = 0;
   // Copy common fields from first invoice if available
   if (invoices.length > 0) {
+    inv.client_name = invoices[0].client_name;
     inv.client_number = invoices[0].client_number;
     inv.week_ending = invoices[0].week_ending;
     inv.invoice_date = invoices[0].invoice_date;
+    inv.account_no = invoices[0].account_no;
     inv.attn_to = invoices[0].attn_to;
     inv.assignment = invoices[0].assignment || 'Payroll';
   }
@@ -1964,10 +1964,11 @@ document.addEventListener('keydown', e => {
 
 // Export functions
 function exportCSV() {
-  const headers = ['Employee Name', 'Job Code', 'Job Title', 'Hours', 'Bill Rate', 'Pay Rate', 'Line Total', 'Invoice No', 'Invoice Date', 'Week Ending', 'Assignment'];
+  const headers = ['Employee Name', 'Job Code', 'Job Title', 'Hours', 'Bill Rate', 'Pay Rate', 'Line Total', 'Invoice No', 'Account No', 'Invoice Date', 'Week Ending', 'Assignment', 'Client Name', 'Client Number'];
   const rows = invoices.map(inv => [
     inv.employee_name || '', inv.job_code || '', inv.job_title || '', inv.hours || 0, inv.bill_rate || 0,
-    inv.pay_rate || 0, inv.line_total || 0, inv.invoice_no || '', inv.invoice_date || '', inv.week_ending || '', inv.assignment || ''
+    inv.pay_rate || 0, inv.line_total || 0, inv.invoice_no || '', inv.account_no || '', inv.invoice_date || '',
+    inv.week_ending || '', inv.assignment || '', inv.client_name || '', inv.client_number || ''
   ].map(v => '"' + String(v).replace(/"/g, '""') + '"').join(','));
   const csv = headers.join(',') + '\n' + rows.join('\n');
   const blob = new Blob([csv], {
@@ -2053,7 +2054,6 @@ async function doConsolidate() {
     const ciNum = document.getElementById('ci_num').value || '';
     const ciAttn = document.getElementById('ci_attn').value || '';
     const ciAddr1 = document.getElementById('ci_addr1').value || '';
-    const ciAddr2 = document.getElementById('ci_addr2').value || '';
     const ciCity = document.getElementById('ci_city').value || '';
 
     const zip = new JSZip();
@@ -2266,10 +2266,15 @@ async function doConsolidate() {
       }
 
       // ── BUILD PDF ─────────────────────────────────────────────
-      const invoiceNo = emps[0].invoice_no || '';
-      const accountNo = emps[0].account_no || '';
-      const invoiceDate = emps[0].invoice_date || '';
-      const weekWorked = emps[0].week_ending || '';
+      // Use first non-empty value from the group for page-level fields
+      function firstVal(field) {
+        for (const e of emps) { if (e[field]) return e[field]; }
+        return '';
+      }
+      const invoiceNo = firstVal('invoice_no');
+      const accountNo = firstVal('account_no');
+      const invoiceDate = firstVal('invoice_date');
+      const weekWorked = firstVal('week_ending');
 
       // Face page pagination: how many employee rows fit on one page?
       const footerReserve = 50;
