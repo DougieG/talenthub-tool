@@ -213,17 +213,18 @@ If week_ending not found, use: "${week_ending || ""}".`;
           warnings.push("Face page missing employees array");
         }
       }
+      const stripCommas = (v) => String(v ?? "0").replace(/,/g, "");
       parsed.employees = parsed.employees.map((emp) => ({
         employee_name: emp.employee_name || emp.name || null,
         job_title: emp.job_title || emp.title || null,
         assignment: emp.assignment || "Payroll",
-        hours: parseFloat(emp.hours) || 0,
+        hours: parseFloat(stripCommas(emp.hours)) || 0,
         hours_display: String(emp.hours ?? "0"),
-        bill_rate: parseFloat(emp.bill_rate) || 0,
+        bill_rate: parseFloat(stripCommas(emp.bill_rate)) || 0,
         bill_rate_display: String(emp.bill_rate ?? "0"),
-        pay_rate: parseFloat(emp.pay_rate) || 0,
+        pay_rate: parseFloat(stripCommas(emp.pay_rate)) || 0,
         pay_rate_display: String(emp.pay_rate ?? "0"),
-        line_total: parseFloat(emp.line_total) || 0,
+        line_total: parseFloat(stripCommas(emp.line_total)) || 0,
         line_total_display: String(emp.line_total ?? "0")
       }));
       // Coerce page-level fields
