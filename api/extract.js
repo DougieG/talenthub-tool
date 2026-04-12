@@ -135,15 +135,27 @@ For OTHER pages:
 }
 
 CRITICAL - Job Code extraction: TalentHub invoices have a job code that is an alphanumeric string. Common formats:
-- Letter + 7 digits: N1103187, N1234567, H1234567, B1110014, E1101270
+- Letter + 7 digits: N1103187, N1234567, H1234567, B1110014, B1110015
 - Letter + 7 digits + hyphen + more digits: B1110014-59200
+- Common first letters: N, B, F, A, K, H (NOT "E" — if you see what looks like "E", double-check if it is actually "N" or "B")
 Look for the FULL code (including any suffix after a hyphen) in:
-1. A box or field labeled "JOB CODE", "JOB ORDER", "P.O. NUMBER", or "PURCHASE ORDER"
-2. At the end of the job title field (e.g. "Temp Budget Analyst N1103187" -> job_code is "N1103187")
+1. The Invoice Reference bracket below each employee name, e.g. "[ Invoice Reference:Health Educator N1103179 $34.48]" -> job_code is "N1103179"
+2. A box or field labeled "JOB CODE", "JOB ORDER", "P.O. NUMBER", or "PURCHASE ORDER"
 3. In the address/client area of the invoice
 4. Anywhere on the page that looks like a code starting with a letter followed by digits
 IMPORTANT: Extract the COMPLETE code including any suffix (e.g. "B1110014-59200" not just "B1110014").
+IMPORTANT: The PRIMARY source for the job code is the Invoice Reference bracket text. Read it character by character — do NOT guess or approximate. Common misreads: "B" vs "E", "N" vs "H", "0" vs "O", "1" vs "I", "5" vs "S".
 Always extract the job_code - it is never missing from a face page.
+
+CRITICAL - Employee completeness: You MUST extract EVERY employee row on the page. Count the rows you see and verify your output has the same count. Common errors:
+- Missing the first or last employee on the page
+- Stopping after a few employees when there are more below
+- Skipping employees with unusual names or formatting
+If a page has 5 employee rows, your employees array MUST have exactly 5 entries.
+
+CRITICAL - attn_to field: The "Attn To" line should contain a person's name (e.g. "JOHN SMITH") or be null if no person is listed. Do NOT put markup percentages like "30% MARK UP" in attn_to. That markup text belongs in client_number if present. If the only text in the Attn line is a percentage markup, set attn_to to null and put the markup text in client_number.
+
+CRITICAL - Numeric values: Return ALL numeric values (hours, bill_rate, pay_rate, line_total) as plain strings WITHOUT commas (e.g. "1000.00" not "1,000.00"). Preserve decimal places as shown on the document.
 
 Confidence: "high" if clearly legible, "low" if uncertain or inferred.
 Missing text fields: use null. Missing numeric fields: use 0.

@@ -1467,10 +1467,18 @@ async function startParsing() {
 
     console.log(`Extraction complete: ${invoices.length} invoices, ${allTimesheets.length} timesheets`);
 
-    // Warn about failed pages
-    const failedPages = pageResults.filter(r => r.failed);
-    if (failedPages.length > 0) {
-      showAlert(`${failedPages.length} page(s) could not be analyzed after retries. Some data may be missing.`, 'err');
+    // Warn about failed pages with specific page numbers
+    const failedPageNums = [];
+    const otherPageNums = [];
+    pageResults.forEach((r, idx) => {
+      if (r.failed) failedPageNums.push(idx + 1);
+      else if (r.page_type === 'other') otherPageNums.push(idx + 1);
+    });
+    if (failedPageNums.length > 0) {
+      showAlert(`${failedPageNums.length} page(s) failed extraction (pages: ${failedPageNums.join(', ')}). Data from these pages is missing.`, 'err');
+    }
+    if (otherPageNums.length > 0) {
+      showAlert(`${otherPageNums.length} page(s) classified as "other" (pages: ${otherPageNums.join(', ')}). These may contain unrecognized invoice data.`, 'warn');
     }
 
     // Helper: normalize name for comparison (strip middle initials, extra spaces, punctuation)
@@ -1486,16 +1494,20 @@ async function startParsing() {
       return normName(n).split(',')[1]?.trim().split(' ')[0] || '';
     }
 
-    // Duplicate detection (using normalized names)
+    // Deduplicate: remove exact duplicates (same name + job_code + week_ending)
     const seen = new Map();
-    const dupes = [];
-    invoices.forEach(inv => {
+    const dupeIndices = [];
+    invoices.forEach((inv, idx) => {
       const key = `${normName(inv.employee_name)}|${(inv.job_code||'').trim()}|${(inv.week_ending||'').trim()}`;
-      if (seen.has(key)) dupes.push(inv.employee_name || 'unknown');
+      if (seen.has(key)) dupeIndices.push(idx);
       else seen.set(key, true);
     });
-    if (dupes.length > 0) {
-      showAlert(`Possible duplicates detected: ${[...new Set(dupes)].join(', ')}. Please review.`, 'err');
+    if (dupeIndices.length > 0) {
+      const dupeNames = [...new Set(dupeIndices.map(i => invoices[i].employee_name || 'unknown'))];
+      for (let di = dupeIndices.length - 1; di >= 0; di--) {
+        invoices.splice(dupeIndices[di], 1);
+      }
+      showAlert(`Removed ${dupeIndices.length} duplicate(s): ${dupeNames.join(', ')}`, 'warn');
     }
 
     // Step 3: Match timesheets to invoices by employee name
@@ -1550,13 +1562,13 @@ async function startParsing() {
         }
       });
 
-      if (bestMatch) {
+      if (bestMatch && bestScore >= 80) {
         assignedInvoices.add(bestMatch.id);
         bestMatch.tsPages.push(ts.pageIdx);
         bestMatch.tsGrid = ts.tsGrid;
         console.log(`  Matched timesheet "${ts.employee_name}" \u2192 invoice "${bestMatch.employee_name}" (score:${bestScore})`);
       } else {
-        console.log(`  \u26A0\uFE0F UNMATCHED timesheet: "${ts.employee_name}" \u2014 no invoice found`);
+        console.log(`  \u26A0\uFE0F UNMATCHED timesheet: "${ts.employee_name}" \u2014 ${bestMatch ? 'best score ' + bestScore + ' below threshold 80' : 'no invoice found'}`);
       }
     });
 
@@ -2061,7 +2073,7 @@ async function doConsolidate() {
 
     // Client info from panel
     const ciName = document.getElementById('ci_name').value || invoices[0]?.client_name || '';
-    const ciNum = document.getElementById('ci_num').value || '';
+    const ciNum = document.getElementById('ci_num').value || invoices[0]?.client_number || '';
     const ciAttn = document.getElementById('ci_attn').value || '';
     const ciAddr1 = document.getElementById('ci_addr1').value || invoices[0]?.client_addr1 || '';
     const ciCity = document.getElementById('ci_city').value || invoices[0]?.client_city || '';
@@ -2099,6 +2111,12 @@ async function doConsolidate() {
       function addTemplatePage() {
         const p = pdfDoc.addPage([W, H]);
         p.drawPage(templatePage);
+        // White-out the ACCOUNT NO. label/box baked into the template
+        p.drawRectangle({
+          x: 443, y: 723, width: 78, height: 32,
+          color: PDFLib.rgb(1, 1, 1),
+          borderWidth: 0
+        });
         return p;
       }
 
@@ -2213,6 +2231,10 @@ async function doConsolidate() {
           });
           days.forEach(function(d, di) {
             var val = grid[di] ? String(grid[di][key] || '') : '';
+            if (isHours && val && val !== '' && val !== '0') {
+              var nv = parseFloat(val);
+              if (!isNaN(nv)) val = nv.toFixed(2);
+            }
             if (val && val !== '0') {
               var vw = font.widthOfTextAtSize(val, gridFontSize);
               page.drawText(val, {
@@ -2282,6 +2304,10 @@ async function doConsolidate() {
         return '';
       }
       const invoiceNo = firstVal('invoice_no');
+      const invoiceNos = [...new Set(emps.map(e => e.invoice_no).filter(Boolean))];
+      if (invoiceNos.length > 1) {
+        console.warn(`Job code ${code} has conflicting invoice numbers: ${invoiceNos.join(', ')} — using ${invoiceNo}`);
+      }
       const accountNo = firstVal('account_no');
       const invoiceDate = firstVal('invoice_date');
       const weekWorked = firstVal('week_ending');
@@ -2354,12 +2380,12 @@ async function doConsolidate() {
           // Hours (right-aligned)
           rgt(fp, emp.hours_display || String(emp.hours || ''), G.columns.hours.x, ey, G.fontSize, empFont, gridColor);
           // Rate (right-aligned)
-          rgt(fp, '$' + (emp.bill_rate_display || String(emp.bill_rate || '0')), G.columns.rate.x, ey, G.fontSize, empFont, gridColor);
+          rgt(fp, fmt(emp.bill_rate), G.columns.rate.x, ey, G.fontSize, empFont, gridColor);
           // Total (right-aligned)
-          rgt(fp, '$' + (emp.line_total_display || String(emp.line_total || '0')), G.columns.total.x, ey, G.fontSize, empFont, gridColor);
+          rgt(fp, fmt(emp.line_total), G.columns.total.x, ey, G.fontSize, empFont, gridColor);
           ey -= G.reference_line_offset;
           // Reference line
-          var ref = '[ Invoice Reference:' + (emp.job_title || '') + ' $' + (emp.pay_rate_display || emp.pay_rate || '') + ']';
+          var ref = '[ Invoice Reference:' + (emp.job_title || '') + ' ' + fmt(emp.pay_rate) + ']';
           fp.drawText(ref, { x: G.columns.employee_name.x, y: ey, size: G.reference.fontSize, font: refFont, color: refColor });
           ey -= (G.row_height - G.reference_line_offset);
         });
@@ -2388,7 +2414,8 @@ async function doConsolidate() {
           let curY = L.timesheet.title.y - 15;
           for (let ei = 0; ei < 2 && (tpi + ei) < emps.length; ei++) {
             const emp = emps[tpi + ei];
-            curY = drawTimesheetGrid(tp, emp, curY, ciName);
+            const tsClientName = ciNum ? ciName + ' #' + ciNum.replace(/^#/, '') : ciName;
+            curY = drawTimesheetGrid(tp, emp, curY, tsClientName);
             curY -= 20;
           }
 

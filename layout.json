@@ -6,7 +6,7 @@
   "info_boxes": {
     "invoice_no":   { "x": 556, "y": 728, "fontSize": 9, "align": "center", "color": "#504A4A", "font": "Helvetica" },
     "account_no":   { "x": 480, "y": 728, "fontSize": 9, "align": "center", "color": "#504A4A", "font": "Helvetica" },
-    "invoice_date": { "x": 556, "y": 688, "fontSize": 9, "align": "center", "color": "#504A4A", "font": "Helvetica" },
+    "invoice_date": { "x": 556, "y": 681, "fontSize": 9, "align": "center", "color": "#504A4A", "font": "Helvetica" },
     "po_number":    { "x": 520, "y": 640, "fontSize": 9, "align": "center", "color": "#504A4A", "font": "Helvetica" }
   },
 
