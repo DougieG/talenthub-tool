@@ -7,6 +7,12 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  // Reject oversized request bodies (base64 image + metadata should be under 15MB)
+  const contentLength = parseInt(req.headers["content-length"] || "0", 10);
+  if (contentLength > 15 * 1024 * 1024) {
+    return res.status(413).json({ error: "Request body too large" });
+  }
+
   const body = req.body;
   const imgData = body?.image_base64 || body?.image_b64;
 
@@ -138,7 +144,7 @@ If week_ending not found, use: "${week_ending || ""}".`;
 
   try {
     const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6-20250514",
       max_tokens: 16000,
       system: systemPrompt,
       messages: [
@@ -170,7 +176,7 @@ If week_ending not found, use: "${week_ending || ""}".`;
       parsed = JSON.parse(clean);
     } catch (e) {
       console.error("JSON parse error:", e.message, "Raw:", raw.substring(0, 200));
-      return res.status(200).json({ page_type: "other", parse_error: true });
+      return res.status(422).json({ page_type: "other", parse_error: true, error: "Failed to parse extraction result" });
     }
 
     // Schema validation & coercion
@@ -200,7 +206,7 @@ If week_ending not found, use: "${week_ending || ""}".`;
           warnings.push("Face page missing employees array");
         }
       }
-      parsed.employees = parsed.employees.map((emp, idx) => ({
+      parsed.employees = parsed.employees.map((emp) => ({
         employee_name: emp.employee_name || emp.name || null,
         job_title: emp.job_title || emp.title || null,
         assignment: emp.assignment || "Payroll",

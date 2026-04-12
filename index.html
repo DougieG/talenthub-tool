@@ -943,7 +943,7 @@ body {
         <div class="stat">Total: <strong id="stTotal">$0</strong></div>
       </div>
     </div>
-    <div class="warn-banner">⚠ ️  <div><strong>OCR Notice:</strong> Data was extracted from scanned documents using AI. Fields marked with ⚠  had low extraction confidence. <strong>Please verify all fields before consolidating.</strong></div></div>
+    <div class="warn-banner">\u26A0\uFE0F <div><strong>OCR Notice:</strong> Data was extracted from scanned documents using AI. Fields marked with \u26A0 could not be read and need manual entry. <strong>Please verify all fields before consolidating.</strong></div></div>
     <div class="client-panel">
       <h3>Client Info — applies to all invoices</h3>
       <div class="fg">
@@ -971,7 +971,7 @@ body {
 
 <!-- Actions bar -->
 <div class="bar" id="bar">
-  <div class="sum"><strong id="bCodes">0</strong> job codes \'b7 <strong id="bEmps">0</strong> employees \'b7 Total: <strong id="bTotal">$0</strong></div>
+  <div class="sum"><strong id="bCodes">0</strong> job codes &middot; <strong id="bEmps">0</strong> employees &middot; Total: <strong id="bTotal">$0</strong></div>
   <div style="display:flex;gap:8px">
     <button class="btn btn-s" onclick="goBack()">←  Back</button>
     <button class="btn btn-s" onclick="exportCSV()">Export CSV</button>
@@ -992,70 +992,23 @@ body {
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-// Layout configuration — positions for text overlay on blank template
-// Edit with configurator.html, export layout.json, paste here
-const LAYOUT = {
-  "version": 1,
-  "template": "blank-template.pdf",
-  "page": { "width": 612, "height": 792 },
+// Layout configuration — loaded dynamically from layout.json
+// Edit with configurator.html, export layout.json
+let LAYOUT = null;
 
-  "info_boxes": {
-    "invoice_no":   { "x": 556, "y": 728, "fontSize": 9, "align": "center", "color": "#504A4A", "font": "Helvetica" },
-    "account_no":   { "x": 480, "y": 728, "fontSize": 9, "align": "center", "color": "#504A4A", "font": "Helvetica" },
-    "invoice_date": { "x": 556, "y": 688, "fontSize": 9, "align": "center", "color": "#504A4A", "font": "Helvetica" },
-    "po_number":    { "x": 520, "y": 640, "fontSize": 9, "align": "center", "color": "#504A4A", "font": "Helvetica" }
-  },
+async function loadLayout() {
+  if (LAYOUT) return LAYOUT;
+  const resp = await fetch('/layout.json');
+  if (!resp.ok) throw new Error('Failed to load layout.json: ' + resp.status);
+  LAYOUT = await resp.json();
+  return LAYOUT;
+}
 
-  "client": {
-    "name":    { "x": 65, "y": 658, "fontSize": 10, "align": "left", "color": "#504A4A", "font": "Helvetica" },
-    "attn":    { "x": 65, "y": 646, "fontSize": 10, "align": "left", "color": "#504A4A", "font": "Helvetica" },
-    "addr1":   { "x": 65, "y": 634, "fontSize": 10, "align": "left", "color": "#504A4A", "font": "Helvetica" },
-    "jobcode": { "x": 65, "y": 622, "fontSize": 10, "align": "left", "color": "#504A4A", "font": "Helvetica" },
-    "city":    { "x": 65, "y": 610, "fontSize": 10, "align": "left", "color": "#504A4A", "font": "Helvetica" }
-  },
-
-  "grid": {
-    "row_start_y": 510,
-    "row_height": 37,
-    "reference_line_offset": 15,
-    "week_worked": { "x": 38, "y": 525, "fontSize": 9, "font": "HelveticaBold", "color": "#504A4A" },
-    "columns": {
-      "employee_name": { "x": 38, "align": "left" },
-      "week_ending":   { "x": 200, "align": "left" },
-      "assignment":    { "x": 310, "align": "left" },
-      "reg_label":     { "x": 395, "align": "left" },
-      "hours":         { "x": 465, "align": "right" },
-      "rate":          { "x": 520, "align": "right" },
-      "total":         { "x": 585, "align": "right" }
-    },
-    "fontSize": 9,
-    "color": "#504A4A",
-    "font": "Helvetica",
-    "reference": {
-      "fontSize": 7.5,
-      "color": "#999999",
-      "font": "Helvetica"
-    }
-  },
-
-  "footer": {
-    "total_due_value": { "x": 548, "y": 82, "fontSize": 11, "align": "center", "color": "#504A4A", "font": "HelveticaBold" },
-    "page_number":     { "x": 28, "y": 30, "fontSize": 7, "align": "left", "color": "#999999", "font": "Helvetica" }
-  },
-
-  "timesheet": {
-    "title": { "x": 38, "y": 525, "fontSize": 10, "font": "HelveticaBold", "color": "#504A4A" },
-    "employee_header": { "x": 38, "fontSize": 9, "font": "HelveticaBold", "color": "#504A4A" },
-    "client_header":   { "x": 310, "fontSize": 9, "font": "HelveticaBold", "color": "#504A4A" },
-    "grid_columns": [38, 110, 165, 220, 275, 330, 385, 440, 495, 560],
-    "grid_col_widths": [72, 55, 55, 55, 55, 55, 55, 55, 65],
-    "header_row_height": 16,
-    "data_row_height": 14,
-    "grid_font_size": 7.5,
-    "grid_border_width": 0.5,
-    "grid_border_color": "#CCCCCC"
-  }
-};
+// Pre-load layout on page init
+loadLayout().catch(e => {
+  console.error('Layout load failed:', e);
+  showAlert('Failed to load PDF layout configuration. Consolidation will not work.', 'err');
+});
 
 function hexToRgb(hex) {
   const r = parseInt(hex.slice(1, 3), 16) / 255;
@@ -1084,8 +1037,8 @@ document.getElementById('we').value = getLastFriday();
 
 // Upload handling
 const dz = document.getElementById('dz'),
-  fi = document.getElementById('fi');
-dz.addEventListener('click', () => fi.click());
+  fileInput = document.getElementById('fi');
+dz.addEventListener('click', () => fileInput.click());
 dz.addEventListener('dragover', e => {
   e.preventDefault();
   dz.classList.add('over')
@@ -1096,9 +1049,9 @@ dz.addEventListener('drop', e => {
   dz.classList.remove('over');
   addFiles(Array.from(e.dataTransfer.files))
 });
-fi.addEventListener('change', () => {
-  addFiles(Array.from(fi.files));
-  fi.value = ''
+fileInput.addEventListener('change', () => {
+  addFiles(Array.from(fileInput.files));
+  fileInput.value = ''
 });
 
 function addFiles(files) {
@@ -1120,7 +1073,7 @@ function removeFile(i) {
 }
 
 function renderChips() {
-  document.getElementById('chips').innerHTML = uploadedFiles.map((f, i) => `<div class="chip">   ${f.name} <span class="rm" onclick="removeFile(${i})">\'d7</span></div>`).join('');
+  document.getElementById('chips').innerHTML = uploadedFiles.map((f, i) => `<div class="chip">\u{1F4C4} ${f.name} <span class="rm" onclick="removeFile(${i})">\u00D7</span></div>`).join('');
   document.getElementById('parseBtn').disabled = !uploadedFiles.length;
   document.getElementById('weRow').style.display = uploadedFiles.length ? 'flex' : 'none';
 }
@@ -1140,7 +1093,7 @@ function setPill(n) {
 
 function fmt(v) {
   const n = parseFloat(String(v).replace(/[,$]/g, ''));
-  return isNaN(n) ? '$0.00' : '$' + n.toFixed(2).replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',')
+  return isNaN(n) ? '$0.00' : '$' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
 
 function esc(s) {
@@ -1209,9 +1162,15 @@ function clearSavedState() {
 
 function restoreState(state) {
   invoices = state.invoices || [];
-  invoices.forEach((inv, i) => inv.id = i);
+  invoices.forEach((inv, i) => {
+    inv.id = i;
+    if (!inv.tsPages) inv.tsPages = [];
+    if (!inv.tsGrid) inv.tsGrid = null;
+  });
+  pageImages = []; // thumbnails not available after restore
   if (state.weekEnding) document.getElementById('we').value = state.weekEnding;
   showReview();
+  showAlert('Session restored. Page thumbnails are unavailable \u2014 re-upload PDFs if you need to view original pages.', 'ok');
   // Restore client panel after render
   if (state.client) {
     document.getElementById('ci_name').value = state.client.name || '';
@@ -1275,15 +1234,17 @@ async function startParsing() {
     }
     document.getElementById('spinMsg').textContent = `Rendering ${totalPages} pages...`;
 
-    // Render all pages to images
+    // Render all pages to images (cache parsed PDFs per file)
+    const pdfCache = new Map();
     for (let i = 0; i < allPages.length; i++) {
       const pg = allPages[i];
       document.getElementById('progFill').style.width = Math.round(((i + 1) / totalPages) * 25) + '%';
       document.getElementById('spinDetail').textContent = `Rendering page ${i+1} of ${totalPages}`;
-      const bytes = allPdfBytes[pg.fileIdx];
-      const pdf = await pdfjsLib.getDocument({
-        data: bytes.slice()
-      }).promise;
+      if (!pdfCache.has(pg.fileIdx)) {
+        const bytes = allPdfBytes[pg.fileIdx];
+        pdfCache.set(pg.fileIdx, await pdfjsLib.getDocument({ data: bytes.slice() }).promise);
+      }
+      const pdf = pdfCache.get(pg.fileIdx);
       const page = await pdf.getPage(pg.pageNum);
       const vp = page.getViewport({
         scale: 2
@@ -1306,17 +1267,31 @@ async function startParsing() {
       weFmt = p[1] + '/' + p[2] + '/' + p[0];
     }
 
-    // Classify + extract all pages in one pass
+    // Classify + extract all pages with concurrent API calls
     document.getElementById('spinMsg').textContent = 'Analyzing pages with AI...';
     document.getElementById('progFill').style.width = '30%';
 
-    const pageResults = [];
-    for (let i = 0; i < totalPages; i++) {
-      document.getElementById('spinDetail').textContent = `Analyzing page ${i+1} of ${totalPages}...`;
-      document.getElementById('progFill').style.width = (30 + Math.round(((i + 1) / totalPages) * 65)) + '%';
-      const imgData = pageImages[i].split(',')[1];
-      const result = await analyzePageAPI(imgData, i + 1, allPages[i].fileName, weFmt);
-      pageResults.push(result);
+    const CONCURRENCY = 4;
+    const pageResults = new Array(totalPages);
+    let completed = 0;
+
+    async function analyzeWithProgress(idx) {
+      const imgData = pageImages[idx].split(',')[1];
+      const result = await analyzePageAPI(imgData, idx + 1, allPages[idx].fileName, weFmt);
+      pageResults[idx] = result;
+      completed++;
+      document.getElementById('spinDetail').textContent = `Analyzed ${completed} of ${totalPages} pages...`;
+      document.getElementById('progFill').style.width = (30 + Math.round((completed / totalPages) * 65)) + '%';
+      return result;
+    }
+
+    // Process in batches of CONCURRENCY
+    for (let i = 0; i < totalPages; i += CONCURRENCY) {
+      const batch = [];
+      for (let j = i; j < Math.min(i + CONCURRENCY, totalPages); j++) {
+        batch.push(analyzeWithProgress(j));
+      }
+      await Promise.all(batch);
     }
 
     // === NEW GROUPING LOGIC ===
@@ -1499,19 +1474,6 @@ async function startParsing() {
       showAlert(`${failedPages.length} page(s) could not be analyzed after retries. Some data may be missing.`, 'err');
     }
 
-    // Duplicate detection
-    const seen = new Map();
-    const dupes = [];
-    invoices.forEach(inv => {
-      const key = `${(inv.employee_name||'').toUpperCase()}|${inv.job_code||''}|${inv.week_ending||''}`;
-      if (seen.has(key)) dupes.push(inv.employee_name || 'unknown');
-      else seen.set(key, true);
-    });
-    if (dupes.length > 0) {
-      showAlert(`Possible duplicates detected: ${[...new Set(dupes)].join(', ')}. Please review.`, 'err');
-    }
-
-    // Step 3: Match timesheets to invoices by employee name
     // Helper: normalize name for comparison (strip middle initials, extra spaces, punctuation)
     function normName(n) {
       return (n || '').toUpperCase().replace(/[^A-Z,\s]/g, '').replace(/\s+/g, ' ').trim();
@@ -1525,6 +1487,22 @@ async function startParsing() {
       return normName(n).split(',')[1]?.trim().split(' ')[0] || '';
     }
 
+    // Duplicate detection (using normalized names)
+    const seen = new Map();
+    const dupes = [];
+    invoices.forEach(inv => {
+      const key = `${normName(inv.employee_name)}|${(inv.job_code||'').trim()}|${(inv.week_ending||'').trim()}`;
+      if (seen.has(key)) dupes.push(inv.employee_name || 'unknown');
+      else seen.set(key, true);
+    });
+    if (dupes.length > 0) {
+      showAlert(`Possible duplicates detected: ${[...new Set(dupes)].join(', ')}. Please review.`, 'err');
+    }
+
+    // Step 3: Match timesheets to invoices by employee name
+    // Track which invoices already have a timesheet to avoid double-assignment
+    const assignedInvoices = new Set();
+
     allTimesheets.forEach(ts => {
       const tsNorm = normName(ts.employee_name);
       const tsLast = lastName(ts.employee_name);
@@ -1533,52 +1511,53 @@ async function startParsing() {
       let bestScore = 0;
 
       invoices.forEach(inv => {
+        if (assignedInvoices.has(inv.id)) return; // skip already-matched invoices
         const invNorm = normName(inv.employee_name);
         if (!invNorm) return;
         const invLast = lastName(inv.employee_name);
         const invFirst = firstName(inv.employee_name);
 
+        let score = 0;
+
         // Exact match (after normalization)
         if (invNorm === tsNorm) {
-          bestMatch = inv;
-          bestScore = 100;
-          return;
+          score = 100;
         }
-
         // Last name + first name match (ignores middle initial differences)
-        if (tsLast && invLast && tsLast === invLast && tsFirst && invFirst && tsFirst === invFirst) {
-          const score = 95;
-          if (score > bestScore) {
-            bestMatch = inv;
-            bestScore = score;
+        else if (tsLast && invLast && tsLast === invLast && tsFirst && invFirst && tsFirst === invFirst) {
+          score = 95;
+        }
+        // Last name match only — but penalize if multiple employees share this last name
+        else if (tsLast && invLast && tsLast === invLast) {
+          score = 85;
+          // Boost if first names partially match
+          if (tsFirst && invFirst && (tsFirst.startsWith(invFirst) || invFirst.startsWith(tsFirst))) {
+            score = 90;
           }
         }
-
-        // Last name match only (most reliable for OCR variations)
-        if (tsLast && invLast && tsLast === invLast) {
-          const score = 85;
-          if (score > bestScore) {
-            bestMatch = inv;
-            bestScore = score;
-          }
-        }
-
         // Partial match — one name contains the other
-        if (invNorm.includes(tsNorm) || tsNorm.includes(invNorm)) {
-          const score = 75;
-          if (score > bestScore) {
-            bestMatch = inv;
-            bestScore = score;
-          }
+        else if (invNorm.includes(tsNorm) || tsNorm.includes(invNorm)) {
+          score = 75;
+        }
+
+        // Bonus: matching job_code adds confidence
+        if (score > 0 && ts.job_code && inv.job_code && ts.job_code === inv.job_code) {
+          score += 3;
+        }
+
+        if (score > bestScore) {
+          bestMatch = inv;
+          bestScore = score;
         }
       });
 
       if (bestMatch) {
+        assignedInvoices.add(bestMatch.id);
         bestMatch.tsPages.push(ts.pageIdx);
         bestMatch.tsGrid = ts.tsGrid;
-        console.log(`  Matched timesheet "${ts.employee_name}" → invoice "${bestMatch.employee_name}" (score:${bestScore})`);
+        console.log(`  Matched timesheet "${ts.employee_name}" \u2192 invoice "${bestMatch.employee_name}" (score:${bestScore})`);
       } else {
-        console.log(`  ⚠️ UNMATCHED timesheet: "${ts.employee_name}" — no invoice found`);
+        console.log(`  \u26A0\uFE0F UNMATCHED timesheet: "${ts.employee_name}" \u2014 no invoice found`);
       }
     });
 
@@ -1668,16 +1647,25 @@ function emptyInvoice() {
     employee_name: '',
     job_title: '',
     job_code: '',
-    hours: '',
-    bill_rate: '',
-    pay_rate: '',
-    line_total: '',
+    hours: 0,
+    hours_display: '',
+    bill_rate: 0,
+    bill_rate_display: '',
+    pay_rate: 0,
+    pay_rate_display: '',
+    line_total: 0,
+    line_total_display: '',
+    client_name: '',
     client_number: '',
     invoice_no: '',
     invoice_date: '',
     week_ending: '',
     attn_to: '',
     assignment: 'Payroll',
+    facePage: null,
+    tsPages: [],
+    tsGrid: null,
+    fileIdx: 0,
     confidence: {
       employee_name: 'low',
       job_code: 'low',
@@ -1766,7 +1754,8 @@ function renderTS(i, inv) {
     dt: ''
   }));
   const grid = inv.tsGrid;
-  const thumbs = inv.tsPages && inv.tsPages.length ? `<div class="ts-thumbs-row">${inv.tsPages.map(p=>`<div class="ts-thumb" onclick="showLB(${p})"><img src="${pageImages[p]}" loading="lazy"><span>Page ${p+1}</span></div>`).join('')}</div>` : '';
+  const hasImages = pageImages.length > 0;
+  const thumbs = hasImages && inv.tsPages && inv.tsPages.length ? `<div class="ts-thumbs-row">${inv.tsPages.map(p=>`<div class="ts-thumb" onclick="showLB(${p})"><img src="${pageImages[p]}" loading="lazy"><span>Page ${p+1}</span></div>`).join('')}</div>` : '';
   const tableRows = rows.map((row, ri) => {
     const key = rowKeys[ri];
     const isHours = key === 'reg' || key === 'ot' || key === 'dt';
@@ -1948,6 +1937,7 @@ function updateStats() {
 }
 
 function showLB(p) {
+  if (!pageImages.length || !pageImages[p]) return;
   currentLBPage = p;
   document.getElementById('lbImg').src = pageImages[p];
   document.getElementById('lbCounter').textContent = `Page ${p+1} of ${pageImages.length}`;
@@ -2026,6 +2016,24 @@ async function doConsolidate() {
     alert(`${missing.length} invoice(s) missing a job code.`);
     return;
   }
+  // Warn about mismatched line totals
+  const mismatched = invoices.filter(inv => {
+    const h = parseFloat(inv.hours) || 0;
+    const r = parseFloat(inv.bill_rate) || 0;
+    const t = parseFloat(inv.line_total) || 0;
+    return h > 0 && r > 0 && t > 0 && Math.abs((h * r) - t) > 0.02;
+  });
+  if (mismatched.length > 0) {
+    const names = mismatched.map(i => i.employee_name || 'unknown').join(', ');
+    if (!confirm(`${mismatched.length} invoice(s) have line totals that don't match hours \u00D7 rate: ${names}.\n\nContinue anyway?`)) return;
+  }
+  // Ensure layout is loaded
+  try {
+    await loadLayout();
+  } catch (e) {
+    showAlert('Cannot consolidate: layout.json failed to load.', 'err');
+    return;
+  }
   showSec('spinSec');
   document.getElementById('bar').classList.remove('active');
   document.getElementById('spinMsg').textContent = 'Generating consolidated PDFs...';
@@ -2102,17 +2110,6 @@ async function doConsolidate() {
           opts.x = f.x - w;
         }
         page.drawText(text, opts);
-      }
-
-      function ctr(page, text, cx, y, size, f, color) {
-        const w = f.widthOfTextAtSize(text, size);
-        page.drawText(text, {
-          x: cx - w / 2,
-          y,
-          size,
-          font: f,
-          color
-        });
       }
 
       function rgt(page, text, rx, y, size, f, color) {
@@ -2297,7 +2294,7 @@ async function doConsolidate() {
       // Helper: draw client block on a page
       function drawClientOnPage(page) {
         drawField(page, L.client.name, ciName);
-        const attnLine = ciNum ? 'Attn To: ' + ciNum : (ciAttn || '');
+        const attnLine = ciAttn ? 'Attn To: ' + ciAttn : '';
         drawField(page, L.client.attn, attnLine);
         drawField(page, L.client.addr1, ciAddr1);
         drawField(page, L.client.jobcode, code);
@@ -2430,6 +2427,7 @@ function doDownload() {
 }
 
 function goBack() {
+  if (invoices.length > 0 && !confirm('Go back to upload? Your edits are saved and can be resumed.')) return;
   showSec('s1');
   setPill(1);
   document.getElementById('bar').classList.remove('active');

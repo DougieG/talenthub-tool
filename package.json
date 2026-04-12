@@ -4,8 +4,7 @@
   "description": "TalentHub Invoice Consolidation Tool",
   "type": "module",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
-    "pdf-lib": "^1.17.1"
+    "@anthropic-ai/sdk": "^0.39.0"
   },
   "engines": {
     "node": ">=18"
