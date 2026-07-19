@@ -30,6 +30,7 @@ Respond ONLY with a valid JSON object. No markdown, no explanation, no backticks
 Page types:
 - "face": A billing/invoice summary page showing employee line items with hours, rate, total for a job code. These pages often contain MULTIPLE employees listed as rows in a table. ANY page with employee names, hours, rates, and total amounts should be classified as "face".
 - "timesheet": A page showing employee timesheet grids with daily hour breakdowns (days of the week with time in/out and hours worked). These pages often contain MULTIPLE employee timesheet grids stacked vertically.
+  IMPORTANT: If the page contains an "Employee Timesheet Adjustment" heading or a Mon-Sun grid with "Time Started"/"Time Finished" rows, it is ALWAYS a "timesheet" page — even if it also shows the standard invoice letterhead, info boxes, or a TOTAL DUE amount. Do NOT classify such pages as "face" and do NOT extract an employees array from them.
 - "other": ONLY for pages that are truly blank, cover sheets with no employee data, or completely unrecognizable content. When in doubt, classify as "face" rather than "other".
 
 CRITICAL: Pages frequently contain MULTIPLE employees. You MUST extract ALL of them.
