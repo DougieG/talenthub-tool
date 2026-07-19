@@ -163,6 +163,9 @@ If week_ending not found, use: "${week_ending || ""}".`;
     const response = await client.messages.create({
       model: "claude-sonnet-5",
       max_tokens: 16000,
+      // Sonnet 5 defaults to adaptive thinking; keep it off so responses are
+      // pure JSON text and per-page cost/latency stay predictable
+      thinking: { type: "disabled" },
       system: systemPrompt,
       messages: [
         {
@@ -185,7 +188,7 @@ If week_ending not found, use: "${week_ending || ""}".`;
       ],
     });
 
-    const raw = response.content[0]?.text || "{}";
+    const raw = response.content.find((b) => b.type === "text")?.text || "{}";
     const clean = raw.replace(/```json\n?|```/g, "").trim();
 
     let parsed;
