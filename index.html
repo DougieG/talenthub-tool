@@ -2312,10 +2312,52 @@ async function doConsolidate() {
       const invoiceDate = firstVal('invoice_date');
       const weekWorked = firstVal('week_ending');
 
-      // Face page pagination: how many employee rows fit on one page?
+      // Reference lines wrap within the employee-name column, matching Kalyn's
+      // originals (e.g. "[ Invoice Reference:Disease / Investigation Unit Interns / $18.30]").
+      // Rows grow with each wrapped line, so pagination works from measured heights.
+      function wrapText(text, f, size, maxW) {
+        const lines = [];
+        let line = '';
+        text.split(' ').forEach(function(word) {
+          const t = line ? line + ' ' + word : word;
+          if (line && f.widthOfTextAtSize(t, size) > maxW) {
+            lines.push(line);
+            line = word;
+          } else {
+            line = t;
+          }
+        });
+        if (line) lines.push(line);
+        return lines;
+      }
+
+      const refWrapWidth = L.grid.reference.max_width || 150;
+      const refLineHeight = L.grid.reference.line_height || 10;
+      const refFontPre = getFont(L.grid.reference.font);
+      const empRows = emps.map(function(emp) {
+        const ref = '[ Invoice Reference:' + (emp.job_title || '') + ' ' + fmt(emp.pay_rate) + ']';
+        const refLines = wrapText(ref, refFontPre, L.grid.reference.fontSize, refWrapWidth);
+        return {
+          emp: emp,
+          refLines: refLines,
+          height: L.grid.row_height + (refLines.length - 1) * refLineHeight
+        };
+      });
+
+      // Face page pagination: fill pages by accumulated row height
       const footerReserve = 50;
-      const maxRows = Math.floor((L.grid.row_start_y - (L.footer.total_due_value.y + footerReserve)) / L.grid.row_height);
-      const facePageCount = Math.max(1, Math.ceil(emps.length / maxRows));
+      const availHeight = L.grid.row_start_y - (L.footer.total_due_value.y + footerReserve);
+      const facePages = [[]];
+      let pageHeight = 0;
+      empRows.forEach(function(row) {
+        if (pageHeight + row.height > availHeight && facePages[facePages.length - 1].length > 0) {
+          facePages.push([]);
+          pageHeight = 0;
+        }
+        facePages[facePages.length - 1].push(row);
+        pageHeight += row.height;
+      });
+      const facePageCount = facePages.length;
 
       // Count timesheet pages: 2 employee timesheets fit per page
       const tsPgCount = emps.length > 0 ? Math.ceil(emps.length / 2) : 0;
@@ -2351,10 +2393,8 @@ async function doConsolidate() {
         drawInfoOnPage(fp);
         drawClientOnPage(fp);
 
-        // Employee rows for this face page
-        const startIdx = fpi * maxRows;
-        const endIdx = Math.min(startIdx + maxRows, emps.length);
-        const pageEmps = emps.slice(startIdx, endIdx);
+        // Employee rows for this face page (pre-measured in facePages)
+        const pageRows = facePages[fpi];
 
         // WeekWorked header
         drawField(fp, L.grid.week_worked, 'WeekWorked: ' + (weekWorked || ''));
@@ -2365,7 +2405,8 @@ async function doConsolidate() {
         const gridColor = hexToRgb(G.color || '#504A4A');
         const refColor = hexToRgb(G.reference.color || '#999999');
 
-        pageEmps.forEach(function(emp) {
+        pageRows.forEach(function(row) {
+          const emp = row.emp;
           var empFont = getFont(G.font);
           var refFont = getFont(G.reference.font);
           // Employee name
@@ -2382,11 +2423,13 @@ async function doConsolidate() {
           rgt(fp, fmt(emp.bill_rate), G.columns.rate.x, ey, G.fontSize, empFont, gridColor);
           // Total (right-aligned)
           rgt(fp, fmt(emp.line_total), G.columns.total.x, ey, G.fontSize, empFont, gridColor);
-          ey -= G.reference_line_offset;
-          // Reference line
-          var ref = '[ Invoice Reference:' + (emp.job_title || '') + ' ' + fmt(emp.pay_rate) + ']';
-          fp.drawText(ref, { x: G.columns.employee_name.x, y: ey, size: G.reference.fontSize, font: refFont, color: refColor });
-          ey -= (G.row_height - G.reference_line_offset);
+          // Reference lines — wrapped within the name column, Kalyn style
+          var refY = ey - G.reference_line_offset;
+          row.refLines.forEach(function(line) {
+            fp.drawText(line, { x: G.columns.employee_name.x, y: refY, size: G.reference.fontSize, font: refFont, color: refColor });
+            refY -= refLineHeight;
+          });
+          ey -= row.height;
         });
 
         // Total due on last face page only (if no timesheets) or not at all on face pages if timesheets follow

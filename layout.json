@@ -37,8 +37,10 @@
     "font": "Helvetica",
     "reference": {
       "fontSize": 7.5,
-      "color": "#999999",
-      "font": "Helvetica"
+      "color": "#504A4A",
+      "font": "Helvetica",
+      "max_width": 100,
+      "line_height": 10
     }
   },
 
