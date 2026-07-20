@@ -1027,22 +1027,22 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 //  (not layout.json / configurator.html) to resize PDF text.
 // ═══════════════════════════════════════════════════════════════════
 const PDF_FONT_SIZES = {
-  invoiceInfoBoxes: 9,   // INVOICE NO. / INVOICE DATE / P.O. NUMBER values (top-right boxes)
+  invoiceInfoBoxes: 10,   // INVOICE NO. / INVOICE DATE / P.O. NUMBER values (top-right boxes)
   clientBlock:      10,  // client name + address block (top-left)
 
   // Face page — employee line-item table
-  tableRow:         12,  // employee name, week ending, assignment, hours, rate, total
-  weekWorkedLabel:  12,  // the "WeekWorked: 02/08/2026" heading above the rows
-  invoiceReference: 13,  // the "[ Invoice Reference: ... ]" bracket lines (raising this a lot may add a wrap line; widen grid.reference.max_width in layout.json to compensate)
+  tableRow:         10,  // employee name, week ending, assignment, hours, rate, total
+  weekWorkedLabel:  11,  // the "WeekWorked: 02/08/2026" heading above the rows
+  invoiceReference: 11,  // the "[ Invoice Reference: ... ]" bracket lines (raising this a lot may add a wrap line; widen grid.reference.max_width in layout.json to compensate)
 
   // Footer
-  totalDue:         11,  // the TOTAL DUE amount
+  totalDue:         10,  // the TOTAL DUE amount
   pageNumber:        9,  // "Page 1 of 2"
 
   // Timesheet pages
-  timesheetTitle:   13,  // "Employee Timesheet Adjustment"
-  timesheetHeader:  11,  // "Employee Name:" / "Client Name:" / "Week Ending:" / "Status:"
-  timesheetGrid:    10,  // all text inside the Mon–Sun grid (bump the label column width if you raise this a lot)
+  timesheetTitle:   11,  // "Employee Timesheet Adjustment"
+  timesheetHeader:  9,  // "Employee Name:" / "Client Name:" / "Week Ending:" / "Status:"
+  timesheetGrid:    9,  // all text inside the Mon–Sun grid (bump the label column width if you raise this a lot)
 };
 
 // Layout configuration — loaded dynamically from layout.json
