@@ -2236,12 +2236,13 @@ async function doConsolidate() {
         let y = startY;
 
         // Employee Name + Client Name header
-        page.drawText('Employee Name: ' + (emp.employee_name || ''), { x: TS.employee_header.x, y, size: TS.employee_header.fontSize, font: fontBold, color: textColor });
-        page.drawText('Client Name: ' + (clientName || ''), { x: TS.client_header.x, y, size: TS.client_header.fontSize, font: fontBold, color: textColor });
-        y -= 13;
-        page.drawText('Week Ending: ' + (emp.week_ending || ''), { x: TS.employee_header.x, y, size: TS.employee_header.fontSize, font: fontBold, color: textColor });
-        page.drawText('Status: APPROVED', { x: TS.client_header.x, y, size: TS.client_header.fontSize, font: fontBold, color: textColor });
-        y -= 18;
+        const tsTextColor = hexToRgb(TS.employee_header.color || L.grid.color || '#111111');
+        page.drawText('Employee Name: ' + (emp.employee_name || ''), { x: TS.employee_header.x, y, size: TS.employee_header.fontSize, font: fontBold, color: tsTextColor });
+        page.drawText('Client Name: ' + (clientName || ''), { x: TS.client_header.x, y, size: TS.client_header.fontSize, font: fontBold, color: tsTextColor });
+        y -= 16;
+        page.drawText('Week Ending: ' + (emp.week_ending || ''), { x: TS.employee_header.x, y, size: TS.employee_header.fontSize, font: fontBold, color: tsTextColor });
+        page.drawText('Status: APPROVED', { x: TS.client_header.x, y, size: TS.client_header.fontSize, font: fontBold, color: tsTextColor });
+        y -= 21;
 
         // Grid table
         const cols = TS.grid_columns;
@@ -2262,15 +2263,17 @@ async function doConsolidate() {
           borderWidth: borderWidth,
           color: PDFLib.rgb(1, 1, 1)
         });
+        const gridTop = y;
+        const cellPad = Math.round((TS.data_row_height - gridFontSize * 0.72) / 2);
         const hdrs = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Total'];
         hdrs.forEach(function(h, hi) {
           if (hi === 0) return;
           page.drawText(h, {
-            x: cols[hi] + colW[hi] / 2 - font.widthOfTextAtSize(h, gridFontSize) / 2,
-            y: y - hdrH + 4,
+            x: cols[hi] + colW[hi] / 2 - fontBold.widthOfTextAtSize(h, gridFontSize) / 2,
+            y: y - hdrH + cellPad + 1,
             size: gridFontSize,
             font: fontBold,
-            color: textColor
+            color: tsTextColor
           });
         });
         y -= hdrH;
@@ -2292,12 +2295,13 @@ async function doConsolidate() {
             borderWidth: borderWidth,
             color: PDFLib.rgb(1, 1, 1)
           });
+          // Row labels are always bold (reference style); values regular, per-row totals bold
           page.drawText(label, {
-            x: cols[0] + 3,
-            y: y - rowH + 4,
+            x: cols[0] + 4,
+            y: y - rowH + cellPad,
             size: gridFontSize,
-            font: isHours ? fontBold : font,
-            color: textColor
+            font: fontBold,
+            color: tsTextColor
           });
           days.forEach(function(d, di) {
             var val = grid[di] ? String(grid[di][key] || '') : '';
@@ -2309,10 +2313,10 @@ async function doConsolidate() {
               var vw = font.widthOfTextAtSize(val, gridFontSize);
               page.drawText(val, {
                 x: cols[di + 1] + colW[di + 1] / 2 - vw / 2,
-                y: y - rowH + 4,
+                y: y - rowH + cellPad,
                 size: gridFontSize,
-                font: isHours ? fontBold : font,
-                color: textColor
+                font: font,
+                color: tsTextColor
               });
             }
           });
@@ -2322,16 +2326,26 @@ async function doConsolidate() {
               var ts = total.toFixed(2);
               var tw = fontBold.widthOfTextAtSize(ts, gridFontSize);
               page.drawText(ts, {
-                x: cols[8] + colW[8] - tw - 3,
-                y: y - rowH + 4,
+                x: cols[8] + colW[8] / 2 - tw / 2,
+                y: y - rowH + cellPad,
                 size: gridFontSize,
                 font: fontBold,
-                color: textColor
+                color: tsTextColor
               });
             }
           }
           y -= rowH;
         });
+
+        // Vertical cell separators for header + data rows (reference has full cell borders)
+        for (var bi = 1; bi < cols.length - 1; bi++) {
+          page.drawLine({
+            start: { x: cols[bi], y: gridTop },
+            end: { x: cols[bi], y: y },
+            thickness: borderWidth,
+            color: gridBorderColor
+          });
+        }
 
         // Total Hours row
         page.drawRectangle({
@@ -2343,24 +2357,32 @@ async function doConsolidate() {
           borderWidth: borderWidth,
           color: PDFLib.rgb(1, 1, 1)
         });
+        // Reference style: single wide cell, bold label right-aligned against the
+        // Total column, value centered in the Total column with its own separator
+        page.drawLine({
+          start: { x: cols[8], y: y },
+          end: { x: cols[8], y: y - rowH },
+          thickness: borderWidth,
+          color: gridBorderColor
+        });
         var totalHours = grid.reduce(function(s, d) { return s + (parseFloat(d.reg) || 0) + (parseFloat(d.ot) || 0) + (parseFloat(d.dt) || 0); }, 0);
         var thLabel = 'Total Hours:';
         var thVal = totalHours.toFixed(2);
         var thLabelW = fontBold.widthOfTextAtSize(thLabel, gridFontSize);
         page.drawText(thLabel, {
-          x: cols[7] + colW[7] - thLabelW - 2,
-          y: y - rowH + 4,
+          x: cols[8] - thLabelW - 5,
+          y: y - rowH + cellPad,
           size: gridFontSize,
           font: fontBold,
-          color: textColor
+          color: tsTextColor
         });
         var thValW = fontBold.widthOfTextAtSize(thVal, gridFontSize);
         page.drawText(thVal, {
-          x: cols[8] + colW[8] - thValW - 3,
-          y: y - rowH + 4,
+          x: cols[8] + colW[8] / 2 - thValW / 2,
+          y: y - rowH + cellPad,
           size: gridFontSize,
           font: fontBold,
-          color: textColor
+          color: tsTextColor
         });
         y -= rowH;
 

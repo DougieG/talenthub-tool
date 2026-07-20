@@ -155,49 +155,49 @@
     "title": {
       "x": 38,
       "y": 525,
-      "fontSize": 10,
+      "fontSize": 12.5,
       "font": "HelveticaBold",
-      "color": "#504A4A"
+      "color": "#111111"
     },
     "employee_header": {
       "x": 38,
-      "fontSize": 9,
+      "fontSize": 11,
       "font": "HelveticaBold",
-      "color": "#504A4A"
+      "color": "#111111"
     },
     "client_header": {
       "x": 310,
-      "fontSize": 9,
+      "fontSize": 11,
       "font": "HelveticaBold",
-      "color": "#504A4A"
+      "color": "#111111"
     },
     "grid_columns": [
       38,
-      110,
-      165,
-      220,
-      275,
-      330,
-      385,
-      440,
-      495,
+      143,
+      195,
+      247,
+      299,
+      351,
+      403,
+      455,
+      507,
       560
     ],
     "grid_col_widths": [
-      72,
-      55,
-      55,
-      55,
-      55,
-      55,
-      55,
-      55,
-      65
+      105,
+      52,
+      52,
+      52,
+      52,
+      52,
+      52,
+      52,
+      53
     ],
-    "header_row_height": 16,
-    "data_row_height": 14,
-    "grid_font_size": 7.5,
-    "grid_border_width": 0.5,
-    "grid_border_color": "#CCCCCC"
+    "header_row_height": 20,
+    "data_row_height": 18,
+    "grid_font_size": 10.5,
+    "grid_border_width": 0.8,
+    "grid_border_color": "#111111"
   }
 }
