@@ -748,6 +748,33 @@ body {
   gap: 10px
 }
 
+.warn-list {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #F5D98E;
+}
+
+.warn-list .wl-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 3px 0;
+  font-size: 13px;
+  color: #7A5C00;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.warn-list .wl-item:hover {
+  text-decoration: underline;
+}
+
+.warn-list .wl-item strong {
+  font-weight: 600;
+}
+
 @media(max-width:768px) {
   .hdr {
     flex-wrap: wrap;
@@ -943,7 +970,9 @@ body {
         <div class="stat">Total: <strong id="stTotal">$0</strong></div>
       </div>
     </div>
-    <div class="warn-banner">&#x26A0;&#xFE0F; <div><strong>OCR Notice:</strong> Data was extracted from scanned documents using AI. Fields marked with &#x26A0; could not be read and need manual entry. <strong>Please verify all fields before consolidating.</strong></div></div>
+    <div class="warn-banner">&#x26A0;&#xFE0F; <div><strong>OCR Notice:</strong> Data was extracted from scanned documents using AI. Fields marked with &#x26A0; could not be read and need manual entry. <strong>Please verify all fields before consolidating.</strong>
+      <div id="warnList" class="warn-list" style="display:none"></div>
+    </div></div>
     <div class="client-panel">
       <h3>Client Info — applies to all invoices</h3>
       <div class="fg">
@@ -1862,6 +1891,13 @@ function upd(i, key, val) {
   else if (key === 'bill_rate') invoices[i].bill_rate_display = val;
   else if (key === 'pay_rate') invoices[i].pay_rate_display = val;
   else if (key === 'line_total') invoices[i].line_total_display = val;
+  // Editing a low-confidence field counts as manual verification — clear the
+  // flag so it drops off the OCR-notice list and loses the yellow highlight
+  if (invoices[i].confidence && invoices[i].confidence[key] === 'low') {
+    invoices[i].confidence[key] = 'high';
+    const fgEl = document.activeElement?.closest?.('.fg.low');
+    if (fgEl) fgEl.classList.remove('low');
+  }
   const card = document.getElementById('c' + i);
   if (card) {
     card.querySelector('.name').textContent = invoices[i].employee_name || '(unknown)';
@@ -1955,6 +1991,40 @@ function updateStats() {
   document.getElementById('bCodes').textContent = codes.size;
   document.getElementById('bEmps').textContent = invoices.length;
   document.getElementById('bTotal').textContent = fmt(gt);
+  updateWarnList();
+}
+
+// Summary of every low-confidence field, shown inside the OCR notice banner so
+// nothing needs hunting through the cards. Entries disappear as fields are edited.
+const WARN_FIELD_LABELS = {
+  employee_name: 'Employee Name', job_title: 'Job Title', job_code: 'Job Code',
+  hours: 'Hours', bill_rate: 'Bill Rate', pay_rate: 'Pay Rate', line_total: 'Line Total'
+};
+
+function updateWarnList() {
+  const el = document.getElementById('warnList');
+  if (!el) return;
+  const items = [];
+  invoices.forEach((inv, i) => {
+    const cf = inv.confidence || {};
+    const flagged = Object.keys(WARN_FIELD_LABELS).filter(k => cf[k] === 'low');
+    if (flagged.length) {
+      items.push(`<button type="button" class="wl-item" onclick="openCard(${i})">&#x26A0; <strong>#${i+1} ${esc(inv.employee_name||'(unknown)')}</strong> &mdash; ${flagged.map(k=>WARN_FIELD_LABELS[k]).join(', ')}</button>`);
+    }
+  });
+  if (items.length) {
+    el.innerHTML = `<div style="margin-bottom:4px"><strong>${items.length} invoice${items.length!==1?'s':''} with fields needing review</strong> (click to jump to it):</div>` + items.join('');
+    el.style.display = 'block';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+function openCard(i) {
+  const card = document.getElementById('c' + i);
+  if (!card) return;
+  if (!card.classList.contains('open')) toggleCard(i);
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function showLB(p) {
