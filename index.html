@@ -2260,8 +2260,7 @@ async function doConsolidate() {
           width: gridW,
           height: hdrH,
           borderColor: gridBorderColor,
-          borderWidth: borderWidth,
-          color: PDFLib.rgb(1, 1, 1)
+          borderWidth: borderWidth
         });
         const gridTop = y;
         const cellPad = Math.round((TS.data_row_height - gridFontSize * 0.72) / 2);
@@ -2292,8 +2291,7 @@ async function doConsolidate() {
             width: gridW,
             height: rowH,
             borderColor: gridBorderColor,
-            borderWidth: borderWidth,
-            color: PDFLib.rgb(1, 1, 1)
+            borderWidth: borderWidth
           });
           // Row labels are always bold (reference style); values regular, per-row totals bold
           page.drawText(label, {
@@ -2354,8 +2352,7 @@ async function doConsolidate() {
           width: gridW,
           height: rowH,
           borderColor: gridBorderColor,
-          borderWidth: borderWidth,
-          color: PDFLib.rgb(1, 1, 1)
+          borderWidth: borderWidth
         });
         // Reference style: single wide cell, bold label right-aligned against the
         // Total column, value centered in the Total column with its own separator
