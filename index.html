@@ -1179,6 +1179,26 @@ function esc(s) {
   return d.innerHTML.replace(/"/g, '&quot;')
 }
 
+// "02/08/2026" (or "2/8/26") -> "2.8"  (month.day, no leading zeros, no year)
+function shortDate(we) {
+  if (!we) return '';
+  const p = String(we).trim().split(/[\/\-.]/);
+  if (p.length < 2) return '';
+  const m = parseInt(p[0], 10), d = parseInt(p[1], 10);
+  return (isNaN(m) || isNaN(d)) ? '' : m + '.' + d;
+}
+
+// Output PDF filename, matching Kalyn's convention: "1065577, N1101163 2.8.pdf"
+function invoicePdfName(invoiceNo, code, weekEnding) {
+  const date = shortDate(weekEnding);
+  let name = '';
+  if (invoiceNo) name += invoiceNo + ', ';
+  name += (code || 'invoice');
+  if (date) name += ' ' + date;
+  // Strip characters that are illegal in filenames (keep comma/space/period)
+  return name.replace(/[\\/:*?"<>|]/g, '') + '.pdf';
+}
+
 function showAlert(msg, type) {
   const el = document.getElementById('alertBox');
   el.className = 'alert ' + type;
@@ -2608,7 +2628,7 @@ async function doConsolidate() {
       }
 
       const pdfData = await pdfDoc.save();
-      zip.file('Consolidated_' + code + '.pdf', pdfData);
+      zip.file(invoicePdfName(invoiceNo, code, weekWorked), pdfData);
       results.push({
         code,
         invoiceNo,
