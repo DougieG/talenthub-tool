@@ -1020,15 +1020,64 @@ body {
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
+// ═══════════════════════════════════════════════════════════════════
+//  PDF TEXT SIZES  (in points) — the one place to tune text size in the
+//  generated PDFs. Change a number, save, reload the page, regenerate.
+//  These override the fontSize values in layout.json, so edit HERE
+//  (not layout.json / configurator.html) to resize PDF text.
+// ═══════════════════════════════════════════════════════════════════
+const PDF_FONT_SIZES = {
+  invoiceInfoBoxes: 9,   // INVOICE NO. / INVOICE DATE / P.O. NUMBER values (top-right boxes)
+  clientBlock:      10,  // client name + address block (top-left)
+
+  // Face page — employee line-item table
+  tableRow:         12,  // employee name, week ending, assignment, hours, rate, total
+  weekWorkedLabel:  12,  // the "WeekWorked: 02/08/2026" heading above the rows
+  invoiceReference: 13,  // the "[ Invoice Reference: ... ]" bracket lines (raising this a lot may add a wrap line; widen grid.reference.max_width in layout.json to compensate)
+
+  // Footer
+  totalDue:         11,  // the TOTAL DUE amount
+  pageNumber:        9,  // "Page 1 of 2"
+
+  // Timesheet pages
+  timesheetTitle:   13,  // "Employee Timesheet Adjustment"
+  timesheetHeader:  11,  // "Employee Name:" / "Client Name:" / "Week Ending:" / "Status:"
+  timesheetGrid:    10,  // all text inside the Mon–Sun grid (bump the label column width if you raise this a lot)
+};
+
 // Layout configuration — loaded dynamically from layout.json
-// Edit with configurator.html, export layout.json
+// Edit with configurator.html, export layout.json (positions/colors);
+// edit PDF_FONT_SIZES above for text sizes.
 let LAYOUT = null;
+
+// Write the PDF_FONT_SIZES numbers into the loaded layout object.
+function applyFontSizes(L) {
+  const S = PDF_FONT_SIZES;
+  ['invoice_no', 'account_no', 'invoice_date', 'po_number'].forEach(k => { if (L.info_boxes && L.info_boxes[k]) L.info_boxes[k].fontSize = S.invoiceInfoBoxes; });
+  ['name', 'attn', 'addr1', 'jobcode', 'city'].forEach(k => { if (L.client && L.client[k]) L.client[k].fontSize = S.clientBlock; });
+  if (L.grid) {
+    L.grid.fontSize = S.tableRow;
+    if (L.grid.week_worked) L.grid.week_worked.fontSize = S.weekWorkedLabel;
+    if (L.grid.reference) L.grid.reference.fontSize = S.invoiceReference;
+  }
+  if (L.footer) {
+    if (L.footer.total_due_value) L.footer.total_due_value.fontSize = S.totalDue;
+    if (L.footer.page_number) L.footer.page_number.fontSize = S.pageNumber;
+  }
+  if (L.timesheet) {
+    if (L.timesheet.title) L.timesheet.title.fontSize = S.timesheetTitle;
+    if (L.timesheet.employee_header) L.timesheet.employee_header.fontSize = S.timesheetHeader;
+    if (L.timesheet.client_header) L.timesheet.client_header.fontSize = S.timesheetHeader;
+    L.timesheet.grid_font_size = S.timesheetGrid;
+  }
+  return L;
+}
 
 async function loadLayout() {
   if (LAYOUT) return LAYOUT;
   const resp = await fetch('/layout.json');
   if (!resp.ok) throw new Error('Failed to load layout.json: ' + resp.status);
-  LAYOUT = await resp.json();
+  LAYOUT = applyFontSizes(await resp.json());
   return LAYOUT;
 }
 
@@ -2624,6 +2673,62 @@ function resetAll() {
   setPill(1);
   document.getElementById('bar').classList.remove('active');
   document.getElementById('alertBox').className = 'alert';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  DEV TEST HARNESS — preview a sample PDF without uploading/extracting.
+//  Run a static server in this folder, e.g.:  python3 -m http.server 8000
+//  then open  http://localhost:8000/?dev  and click "Generate Test PDF"
+//  (or call generateTestPDF() from the browser console). It fills in
+//  sample data and runs the real generator, so what you see is exactly
+//  what the tool produces. See TESTING.md.
+// ═══════════════════════════════════════════════════════════════════
+async function generateTestPDF() {
+  // Open the tab now, inside the click, so it isn't popup-blocked after awaits
+  const win = window.open('', '_blank');
+  try {
+    const g = (s, e, l, r) => ({ start: s, end: e, lunch: l, reg: r, ot: 0, dt: 0 });
+    const empty = () => ({ start: '', end: '', lunch: '', reg: 0, ot: 0, dt: 0 });
+    const fullWeek = (start, end) => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map(() => g(start, end, '60 mins', 7)).concat([empty(), empty()]);
+    const base = {
+      job_code: 'N1103189', week_ending: '2/8/2026', assignment: 'Payroll',
+      invoice_no: '1065610', invoice_date: '02/13/26', client_number: '250'
+    };
+    invoices = [
+      { ...base, employee_name: 'FU, RAO', job_title: 'Disease Investigation Unit Interns', pay_rate: '18.30', hours: '35.00', hours_display: '35.00', bill_rate: '23.79', bill_rate_display: '23.79', line_total: '832.65', line_total_display: '832.65', tsGrid: fullWeek('9:00AM', '5:00PM') },
+      { ...base, employee_name: 'KUWAR, AAKANKSHA S', job_title: 'Disease Investigator', pay_rate: '39.66', hours: '35.00', hours_display: '35.00', bill_rate: '51.56', bill_rate_display: '51.56', line_total: '1804.60', line_total_display: '1804.60', tsGrid: fullWeek('8:00AM', '4:00PM') }
+    ];
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    set('ci_name', 'FUND FOR PUBLIC HEALTH');
+    set('ci_attn', '30% MARK UP');
+    set('ci_addr1', '22 CORTLANDT STREET');
+    set('ci_city', 'New York, NY 10007');
+    LAYOUT = null; // force a fresh layout load so PDF_FONT_SIZES edits are picked up
+    await doConsolidate();
+    if (!zipBlob) throw new Error('generation produced no output (check console)');
+    const zip = await JSZip.loadAsync(zipBlob);
+    const firstName = Object.keys(zip.files).find(n => n.toLowerCase().endsWith('.pdf'));
+    const bytes = await zip.file(firstName).async('uint8array');
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    if (win) win.location = url;
+    else { const a = document.createElement('a'); a.href = url; a.download = firstName; a.click(); }
+  } catch (e) {
+    console.error('Test PDF failed:', e);
+    if (win) win.close();
+    alert('Test PDF failed: ' + e.message);
+  }
+}
+window.generateTestPDF = generateTestPDF;
+
+// Show a floating dev button when the page is opened with ?dev (or ?test)
+if (/[?&](dev|test)(=|&|$)/.test(location.search)) {
+  window.addEventListener('DOMContentLoaded', () => {
+    const btn = document.createElement('button');
+    btn.textContent = '🧪 Generate Test PDF';
+    btn.setAttribute('style', 'position:fixed;bottom:16px;right:16px;z-index:99999;padding:10px 16px;background:#2f8f5b;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.25)');
+    btn.onclick = generateTestPDF;
+    document.body.appendChild(btn);
+  });
 }
 </script>
 </body>
