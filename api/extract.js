@@ -22,10 +22,6 @@ export default async function handler(req, res) {
 
   const { page_num, file_name, week_ending } = body;
 
-  // Model is whitelisted; defaults to Sonnet 5 so normal use is unchanged.
-  const ALLOWED_MODELS = ["claude-sonnet-5", "claude-haiku-4-5"];
-  const modelId = ALLOWED_MODELS.includes(body.model) ? body.model : "claude-sonnet-5";
-
   const systemPrompt = `You are an invoice data extraction assistant for TalentHub Workforce Inc., a staffing agency.
 You extract structured data from scanned invoice pages.
 
@@ -166,8 +162,11 @@ If week_ending not found, use: "${week_ending || ""}".`;
 
   try {
     const createParams = {
-      model: modelId,
+      model: "claude-sonnet-5",
       max_tokens: 16000,
+      // Sonnet 5 defaults to adaptive thinking; keep it off so responses are
+      // pure JSON text and per-page cost/latency stay predictable.
+      thinking: { type: "disabled" },
       // The system prompt is identical on every page's request, so cache it —
       // the first call writes it, the rest read it at ~1/10th the input cost.
       system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
@@ -191,9 +190,6 @@ If week_ending not found, use: "${week_ending || ""}".`;
         },
       ],
     };
-    // Sonnet 5 defaults to adaptive thinking; disable it so responses are pure
-    // JSON. Haiku doesn't think unless asked, so it needs no thinking config.
-    if (modelId === "claude-sonnet-5") createParams.thinking = { type: "disabled" };
 
     const response = await client.messages.create(createParams);
 
@@ -302,7 +298,7 @@ If week_ending not found, use: "${week_ending || ""}".`;
     // ignores this field; a caller that wants per-run cost can read it.
     const u = response.usage || {};
     parsed._usage = {
-      model: response.model || modelId,
+      model: response.model || "claude-sonnet-5",
       input_tokens: u.input_tokens || 0,
       output_tokens: u.output_tokens || 0,
       cache_creation_input_tokens: u.cache_creation_input_tokens || 0,
