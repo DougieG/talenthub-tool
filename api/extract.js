@@ -167,7 +167,9 @@ If week_ending not found, use: "${week_ending || ""}".`;
       // Sonnet 5 defaults to adaptive thinking; keep it off so responses are
       // pure JSON text and per-page cost/latency stay predictable
       thinking: { type: "disabled" },
-      system: systemPrompt,
+      // The system prompt is identical on every page's request, so cache it —
+      // the first call writes it, the rest read it at ~1/10th the input cost.
+      system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
       messages: [
         {
           role: "user",
@@ -289,6 +291,16 @@ If week_ending not found, use: "${week_ending || ""}".`;
       parsed.validation_warnings = warnings;
       console.warn("Validation warnings:", warnings);
     }
+
+    // Surface token usage for cost monitoring / cache verification. The client
+    // ignores this field; a caller that wants per-run cost can read it.
+    const u = response.usage || {};
+    parsed._usage = {
+      input_tokens: u.input_tokens || 0,
+      output_tokens: u.output_tokens || 0,
+      cache_creation_input_tokens: u.cache_creation_input_tokens || 0,
+      cache_read_input_tokens: u.cache_read_input_tokens || 0,
+    };
 
     return res.status(200).json(parsed);
   } catch (err) {
