@@ -1341,8 +1341,14 @@ async function startParsing() {
       }
       const pdf = pdfCache.get(pg.fileIdx);
       const page = await pdf.getPage(pg.pageNum);
+      // Resolution of the page image sent to the AI. Lower = cheaper (image
+      // tokens scale with pixel area), higher = more legible small print.
+      // 1.5 (~108 DPI) was tested to extract identically to 2 (~144 DPI) on
+      // the gold batch while using ~43% fewer image tokens. Raise toward 2 if
+      // you ever see mis-reads on small rates/codes.
+      const AI_PAGE_SCALE = 1.5;
       const vp = page.getViewport({
-        scale: 2
+        scale: AI_PAGE_SCALE
       });
       const canvas = document.createElement('canvas');
       canvas.width = vp.width;
