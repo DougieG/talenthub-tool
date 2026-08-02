@@ -2498,13 +2498,20 @@ async function doConsolidate() {
       const refWrapWidth = L.grid.reference.max_width || 150;
       const refLineHeight = L.grid.reference.line_height || 10;
       const refFontPre = getFont(L.grid.reference.font);
+      // Long employee names wrap within the name column instead of overrunning the
+      // Week Ending date (matches Kalyn's originals, e.g. "BOTELLO NUNEZ, ARCANIA" / "MERCEDES").
+      const nameWrapWidth = (L.grid.columns.week_ending.x - L.grid.columns.employee_name.x) - 8;
+      const nameLineHeight = Math.round(L.grid.fontSize * 1.25);
+      const empFontPre = getFont(L.grid.font);
       const empRows = emps.map(function(emp) {
+        const nameLines = wrapText(emp.employee_name || '', empFontPre, L.grid.fontSize, nameWrapWidth);
         const ref = '[ Invoice Reference:' + (emp.job_title || '') + ' ' + fmt(emp.pay_rate) + ']';
         const refLines = wrapText(ref, refFontPre, L.grid.reference.fontSize, refWrapWidth);
         return {
           emp: emp,
+          nameLines: nameLines,
           refLines: refLines,
-          height: L.grid.row_height + (refLines.length - 1) * refLineHeight
+          height: L.grid.row_height + (nameLines.length - 1) * nameLineHeight + (refLines.length - 1) * refLineHeight
         };
       });
 
@@ -2539,7 +2546,11 @@ async function doConsolidate() {
       // Helper: draw client block on a page
       function drawClientOnPage(page) {
         drawField(page, L.client.name, ciName);
-        const attnLine = ciAttn ? 'Attn To: ' + ciAttn : '';
+        // Markup ("Attn To", e.g. "40% MARK UP") varies per invoice — use this
+        // job code's own extracted value, falling back to the global client-panel
+        // value only when the group has none.
+        const groupAttn = firstVal('attn_to') || ciAttn;
+        const attnLine = groupAttn ? 'Attn To: ' + groupAttn : '';
         drawField(page, L.client.attn, attnLine);
         drawField(page, L.client.addr1, ciAddr1);
         drawField(page, L.client.jobcode, code);
@@ -2573,8 +2584,12 @@ async function doConsolidate() {
           const emp = row.emp;
           var empFont = getFont(G.font);
           var refFont = getFont(G.reference.font);
-          // Employee name
-          fp.drawText(emp.employee_name || '', { x: G.columns.employee_name.x, y: ey, size: G.fontSize, font: empFont, color: gridColor });
+          // Employee name — wraps to extra lines if too long for the name column
+          var nameY = ey;
+          row.nameLines.forEach(function(nl) {
+            fp.drawText(nl, { x: G.columns.employee_name.x, y: nameY, size: G.fontSize, font: empFont, color: gridColor });
+            nameY -= nameLineHeight;
+          });
           // Week ending
           fp.drawText(emp.week_ending || '', { x: G.columns.week_ending.x, y: ey, size: G.fontSize, font: empFont, color: gridColor });
           // Assignment
@@ -2587,8 +2602,8 @@ async function doConsolidate() {
           rgt(fp, fmt(emp.bill_rate), G.columns.rate.x, ey, G.fontSize, empFont, gridColor);
           // Total (right-aligned)
           rgt(fp, fmt(emp.line_total), G.columns.total.x, ey, G.fontSize, empFont, gridColor);
-          // Reference lines — wrapped within the name column, Kalyn style
-          var refY = ey - G.reference_line_offset;
+          // Reference lines — below the (possibly multi-line) name, Kalyn style
+          var refY = ey - G.reference_line_offset - (row.nameLines.length - 1) * nameLineHeight;
           row.refLines.forEach(function(line) {
             fp.drawText(line, { x: G.columns.employee_name.x, y: refY, size: G.reference.fontSize, font: refFont, color: refColor });
             refY -= refLineHeight;
