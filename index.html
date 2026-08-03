@@ -1895,6 +1895,32 @@ function renderTS(i, inv) {
   </div>`;
 }
 
+// Parse a timesheet time ("9:00AM", "1:30 PM", "08:00AM", "9") to minutes since midnight; null if unrecognized.
+function parseTSTime(s) {
+  const m = String(s || '').trim().match(/^(\d{1,2})(?::(\d{2}))?\s*([AaPp][Mm])?$/);
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const min = m[2] ? parseInt(m[2], 10) : 0;
+  const ap = (m[3] || '').toUpperCase();
+  if (h > 23 || min > 59) return null;
+  if (ap === 'PM' && h < 12) h += 12;
+  if (ap === 'AM' && h === 12) h = 0;
+  return h * 60 + min;
+}
+// "30 mins" / "0 mins" / "" -> minutes (default 0)
+function parseTSLunch(s) {
+  const m = String(s || '').match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : 0;
+}
+// Regular hours for one day from start/end/lunch; '' if not computable or non-positive.
+function computeDayHours(day) {
+  const st = parseTSTime(day.start), en = parseTSTime(day.end);
+  if (st == null || en == null) return '';
+  const mins = en - st - parseTSLunch(day.lunch);
+  if (mins <= 0) return '';
+  return (mins / 60).toFixed(2);
+}
+
 function updTS(i, di, key, val) {
   if (!invoices[i].tsGrid) invoices[i].tsGrid = Array(7).fill(null).map(() => ({
     start: '',
@@ -1905,9 +1931,23 @@ function updTS(i, di, key, val) {
     dt: ''
   }));
   invoices[i].tsGrid[di][key] = val;
-  // recalc total hours if reg/ot/dt changed — update totals in-place without re-rendering
-  if (key === 'reg' || key === 'ot' || key === 'dt') {
-    const grid = invoices[i].tsGrid;
+  const grid = invoices[i].tsGrid;
+
+  // Editing a time or lunch recomputes that day's Regular Hours and overwrites it,
+  // then cascades to the totals (same as editing Regular Hours directly).
+  const timeEdit = (key === 'start' || key === 'end' || key === 'lunch');
+  if (timeEdit) {
+    const computed = computeDayHours(grid[di]);
+    grid[di].reg = computed;
+    const card0 = document.getElementById('c' + i);
+    if (card0) {
+      const regInput = card0.querySelector(`input[oninput*="updTS(${i},${di},'reg'"]`);
+      if (regInput) regInput.value = computed;
+    }
+  }
+
+  // recalc total hours if reg/ot/dt changed (directly or via a time recompute) — update in-place without re-rendering
+  if (key === 'reg' || key === 'ot' || key === 'dt' || timeEdit) {
     const totalReg = grid.reduce((s, d) => s + (parseFloat(d.reg) || 0), 0);
     const totalOt = grid.reduce((s, d) => s + (parseFloat(d.ot) || 0), 0);
     const totalDt = grid.reduce((s, d) => s + (parseFloat(d.dt) || 0), 0);
