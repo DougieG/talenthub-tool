@@ -1189,14 +1189,54 @@ function shortDate(we) {
 }
 
 // Output PDF filename, matching Kalyn's convention: "1065577, N1101163 2.8.pdf"
-function invoicePdfName(invoiceNo, code, weekEnding) {
+function invoicePdfName(invoiceNo, code, weekEnding, periodSuffix) {
   const date = shortDate(weekEnding);
   let name = '';
   if (invoiceNo) name += invoiceNo + ', ';
   name += (code || 'invoice');
   if (date) name += ' ' + date;
+  if (periodSuffix) name += ' ' + periodSuffix;
   // Strip characters that are illegal in filenames (keep comma/space/period)
   return name.replace(/[\\/:*?"<>|]/g, '') + '.pdf';
+}
+
+// ── Fiscal-year split (client fiscal year ends June 30) ──────────────
+// Parse "MM/DD/YYYY" (or M/D/YY) week-ending into a local Date; null if unparseable.
+function parseWeekEnding(we) {
+  const m = String(we || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (!m) return null;
+  let y = parseInt(m[3], 10); if (y < 100) y += 2000;
+  return new Date(y, parseInt(m[1], 10) - 1, parseInt(m[2], 10));
+}
+// Calendar date of grid day di (0=Mon..6=Sun; Sun == week ending) for a given week ending date.
+function dayDate(weDate, di) {
+  const d = new Date(weDate); d.setDate(d.getDate() - (6 - di)); return d;
+}
+// Fiscal year (labelled by ending year) for a date, fiscal year = Jul 1 .. Jun 30.
+function fiscalYearOf(date) {
+  return (date.getMonth() + 1) >= 7 ? date.getFullYear() + 1 : date.getFullYear();
+}
+// Split one employee entry into per-fiscal-year entries when its work week straddles
+// Jun 30 / Jul 1. Returns [entry] unchanged (with a _fy tag) when it doesn't straddle,
+// so every non-boundary week behaves exactly as before.
+function splitEntryByFiscalYear(emp) {
+  const weDate = parseWeekEnding(emp.week_ending);
+  const grid = Array.isArray(emp.tsGrid) ? emp.tsGrid : null;
+  if (!weDate || !grid || !grid.length) return [{ ...emp, _fy: null }];
+  const dayHrs = di => (parseFloat(grid[di].reg) || 0) + (parseFloat(grid[di].ot) || 0) + (parseFloat(grid[di].dt) || 0);
+  const dayFy = grid.map((_, di) => dayHrs(di) > 0 ? fiscalYearOf(dayDate(weDate, di)) : null);
+  const fys = [...new Set(dayFy.filter(v => v != null))].sort((a, b) => a - b);
+  if (fys.length <= 1) return [{ ...emp, _fy: fys[0] != null ? fys[0] : fiscalYearOf(weDate) }];
+  // Straddles the fiscal boundary — one entry per fiscal year, each carrying only its own days.
+  const rate = parseFloat(emp.bill_rate) || 0;
+  return fys.map(fy => {
+    const g = grid.map((day, di) => dayFy[di] === fy
+      ? { ...day }
+      : { start: '', end: '', lunch: '', reg: 0, ot: 0, dt: 0 });
+    const hrs = g.reduce((s, d) => s + (parseFloat(d.reg) || 0) + (parseFloat(d.ot) || 0) + (parseFloat(d.dt) || 0), 0);
+    const lt = (hrs * rate).toFixed(2);
+    return { ...emp, tsGrid: g, hours: hrs.toFixed(2), hours_display: hrs.toFixed(2), line_total: lt, line_total_display: lt, _fy: fy };
+  });
 }
 
 function showAlert(msg, type) {
@@ -2250,11 +2290,22 @@ async function doConsolidate() {
 
   try {
     // Group by job code
+    // Fiscal-year split: when a work week straddles Jun 30 / Jul 1, an employee's
+    // hours are split into separate entries per fiscal year. Non-straddling weeks
+    // are returned unchanged, so this is a no-op except at the fiscal boundary.
+    const fiscalEntries = [];
+    invoices.forEach(inv => { splitEntryByFiscalYear(inv).forEach(e => fiscalEntries.push(e)); });
+
+    // Group by job code, then by fiscal year (so a straddling code -> two files).
     const groups = {};
-    invoices.forEach(inv => {
-      if (!groups[inv.job_code]) groups[inv.job_code] = [];
-      groups[inv.job_code].push(inv);
+    fiscalEntries.forEach(inv => {
+      const key = inv.job_code + '||' + inv._fy;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(inv);
     });
+    // Which job codes actually split across >1 fiscal year (their files need a period suffix).
+    const fyByCode = {};
+    fiscalEntries.forEach(inv => { (fyByCode[inv.job_code] = fyByCode[inv.job_code] || new Set()).add(inv._fy); });
 
     // Client info from panel
     const ciName = document.getElementById('ci_name').value || invoices[0]?.client_name || '';
@@ -2264,17 +2315,23 @@ async function doConsolidate() {
     const ciCity = document.getElementById('ci_city').value || invoices[0]?.client_city || '';
 
     const zip = new JSZip();
-    const codes = Object.keys(groups).sort();
+    const groupKeys = Object.keys(groups).sort();
     const results = [];
 
     // Load blank template once
     const templateBytes = await fetch('/blank-template.pdf').then(r => r.arrayBuffer());
     const templateDoc = await PDFLib.PDFDocument.load(templateBytes);
 
-    for (let ci = 0; ci < codes.length; ci++) {
-      const code = codes[ci];
-      const emps = groups[code];
-      document.getElementById('progFill').style.width = Math.round(((ci + 1) / codes.length) * 90) + '%';
+    for (let ci = 0; ci < groupKeys.length; ci++) {
+      const emps = groups[groupKeys[ci]];
+      const code = emps[0].job_code;           // real job code (key also encodes fiscal year)
+      // Only files for a code that split across the fiscal boundary get a period label.
+      let periodSuffix = '';
+      if (fyByCode[code] && fyByCode[code].size > 1) {
+        const fy = emps[0]._fy, minFy = Math.min(...fyByCode[code]);
+        periodSuffix = (fy === minFy) ? '(thru 6-30-' + fy + ')' : '(from 7-1-' + (fy - 1) + ')';
+      }
+      document.getElementById('progFill').style.width = Math.round(((ci + 1) / groupKeys.length) * 90) + '%';
       document.getElementById('spinDetail').textContent = `Building ${code} (${emps.length} employee${emps.length!==1?'s':''})...`;
 
       const pdfDoc = await PDFLib.PDFDocument.create();
@@ -2689,7 +2746,7 @@ async function doConsolidate() {
       }
 
       const pdfData = await pdfDoc.save();
-      zip.file(invoicePdfName(invoiceNo, code, weekWorked), pdfData);
+      zip.file(invoicePdfName(invoiceNo, code, weekWorked, periodSuffix), pdfData);
       results.push({
         code,
         invoiceNo,
