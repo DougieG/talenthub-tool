@@ -51,6 +51,7 @@ For FACE pages, extract ALL employees as an array:
   "employees": [
     {
       "employee_name": "LAST, FIRST",
+      "week_ending": "MM/DD/YYYY",
       "job_title": "...",
       "assignment": "Payroll",
       "hours": "40.00",
@@ -60,6 +61,7 @@ For FACE pages, extract ALL employees as an array:
     },
     {
       "employee_name": "LAST2, FIRST2",
+      "week_ending": "MM/DD/YYYY",
       "job_title": "...",
       "assignment": "Payroll",
       "hours": "35.00",
@@ -74,6 +76,8 @@ IMPORTANT for face pages:
 - Return hours, bill_rate, pay_rate, and line_total as STRINGS preserving the exact decimal format shown on the document (e.g., "40.00", "4.0", "25.00", "1000.00"). Do NOT drop trailing zeros.
 - Extract EVERY employee row you see. Do NOT skip any.
 - Each row typically shows: employee name, week ending, assignment (usually "Payroll"), a type indicator like "Reg", hours, bill rate, and total.
+- CRITICAL — per-row week_ending: employee rows are grouped under bold "WeekWorked: MM/DD/YYYY" headings. Set EACH employee's "week_ending" to the date of the WeekWorked heading it appears under (or the date shown in that row's Week Ending column). Do NOT copy a single page-level date onto every row.
+- CRITICAL — same employee, multiple weeks: the SAME employee may appear more than once on a page, under different WeekWorked headings (e.g. one row under "WeekWorked: 07/19/2026" and another under "WeekWorked: 07/26/2026"). Extract EACH occurrence as its OWN separate entry in the employees array, each with its own week_ending, hours, and line_total. Never merge them into one row.
 - The pay rate is often in a reference line below the employee row in brackets, like "[ Invoice Reference: Job Title $17.50]"
 - The job_title is also in that reference line.
 - bill_rate and pay_rate are DIFFERENT numbers. bill_rate is the higher rate shown in the main table. pay_rate is the lower rate shown in the reference line.
@@ -234,6 +238,7 @@ If week_ending not found, use: "${week_ending || ""}".`;
       const stripCommas = (v) => String(v ?? "0").replace(/,/g, "");
       parsed.employees = parsed.employees.map((emp) => ({
         employee_name: emp.employee_name || emp.name || null,
+        week_ending: emp.week_ending || null,
         job_title: emp.job_title || emp.title || null,
         assignment: emp.assignment || "Payroll",
         hours: parseFloat(stripCommas(emp.hours)) || 0,

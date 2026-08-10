@@ -1517,7 +1517,9 @@ async function startParsing() {
             attn_to: r.attn_to || '',
             client_addr1: r.client_addr1 || '',
             client_city: r.client_city || '',
-            week_ending: r.week_ending || weFmt,
+            // Per-employee week first (an employee can appear under multiple WeekWorked
+            // headings), then the page-level week, then the picker value.
+            week_ending: emp.week_ending || r.week_ending || weFmt,
             // Employee-level fields
             employee_name: empName,
             job_title: emp.job_title || emp.title || '',
@@ -1698,6 +1700,15 @@ async function startParsing() {
         // Bonus: matching job_code adds confidence
         if (score > 0 && ts.job_code && inv.job_code && ts.job_code === inv.job_code) {
           score += 3;
+        }
+
+        // Bonuses to steer the right week's timesheet to the right face entry when
+        // the same employee appears under multiple WeekWorked headings.
+        if (score > 0) {
+          const wa = parseWeekEnding(ts.week_ending), wb = parseWeekEnding(inv.week_ending);
+          if (wa && wb && wa.getTime() === wb.getTime()) score += 50;
+          const tsHrs = (ts.tsGrid || []).reduce((s, d) => s + (parseFloat(d.reg) || 0) + (parseFloat(d.ot) || 0) + (parseFloat(d.dt) || 0), 0);
+          if (tsHrs > 0 && Math.abs(tsHrs - (parseFloat(inv.hours) || 0)) < 0.01) score += 20;
         }
 
         if (score > bestScore) {
@@ -2571,7 +2582,16 @@ async function doConsolidate() {
       }
       const accountNo = firstVal('account_no');
       const invoiceDate = firstVal('invoice_date');
-      const weekWorked = firstVal('week_ending');
+      // An invoice may hold more than one week. Order employees chronologically by
+      // week ending, and label the invoice with the LATEST (current) week.
+      emps.sort(function(a, b) {
+        const da = parseWeekEnding(a.week_ending), db = parseWeekEnding(b.week_ending);
+        return (da ? da.getTime() : 0) - (db ? db.getTime() : 0);
+      });
+      let weekWorked = firstVal('week_ending');
+      { let latest = -Infinity;
+        emps.forEach(function(e) { const d = parseWeekEnding(e.week_ending); if (d && d.getTime() >= latest) { latest = d.getTime(); weekWorked = e.week_ending; } });
+      }
 
       // Reference lines wrap within the employee-name column, matching Kalyn's
       // originals (e.g. "[ Invoice Reference:Disease / Investigation Unit Interns / $18.30]").
@@ -2600,30 +2620,37 @@ async function doConsolidate() {
       const nameWrapWidth = (L.grid.columns.week_ending.x - L.grid.columns.employee_name.x) - 8;
       const nameLineHeight = Math.round(L.grid.fontSize * 1.25);
       const empFontPre = getFont(L.grid.font);
-      const empRows = emps.map(function(emp) {
+      // Build render items: a bold "WeekWorked:" heading before each new week, then
+      // that week's employee rows. Rows grow with wrapped name/reference lines.
+      const headingHeight = L.grid.week_worked.y - L.grid.row_start_y; // preserve the original heading→row gap
+      const items = [];
+      let curWeek = null;
+      emps.forEach(function(emp) {
+        const wk = emp.week_ending || '';
+        if (wk !== curWeek) { items.push({ type: 'heading', week: wk, height: headingHeight }); curWeek = wk; }
         const nameLines = wrapText(emp.employee_name || '', empFontPre, L.grid.fontSize, nameWrapWidth);
         const ref = '[ Invoice Reference:' + (emp.job_title || '') + ' ' + fmt(emp.pay_rate) + ']';
         const refLines = wrapText(ref, refFontPre, L.grid.reference.fontSize, refWrapWidth);
-        return {
-          emp: emp,
-          nameLines: nameLines,
-          refLines: refLines,
+        items.push({
+          type: 'emp', emp: emp, nameLines: nameLines, refLines: refLines,
           height: L.grid.row_height + (nameLines.length - 1) * nameLineHeight + (refLines.length - 1) * refLineHeight
-        };
+        });
       });
 
-      // Face page pagination: fill pages by accumulated row height
+      // Face page pagination: fill pages by accumulated item height. The flow starts at
+      // the WeekWorked heading position so the first heading sits where it always did.
       const footerReserve = 50;
-      const availHeight = L.grid.row_start_y - (L.footer.total_due_value.y + footerReserve);
+      const flowTop = L.grid.week_worked.y;
+      const availHeight = flowTop - (L.footer.total_due_value.y + footerReserve);
       const facePages = [[]];
       let pageHeight = 0;
-      empRows.forEach(function(row) {
-        if (pageHeight + row.height > availHeight && facePages[facePages.length - 1].length > 0) {
+      items.forEach(function(it) {
+        if (pageHeight + it.height > availHeight && facePages[facePages.length - 1].length > 0) {
           facePages.push([]);
           pageHeight = 0;
         }
-        facePages[facePages.length - 1].push(row);
-        pageHeight += row.height;
+        facePages[facePages.length - 1].push(it);
+        pageHeight += it.height;
       });
       const facePageCount = facePages.length;
 
@@ -2665,19 +2692,22 @@ async function doConsolidate() {
         drawInfoOnPage(fp);
         drawClientOnPage(fp);
 
-        // Employee rows for this face page (pre-measured in facePages)
+        // Render items (WeekWorked headings + employee rows) for this face page
         const pageRows = facePages[fpi];
-
-        // WeekWorked header
-        drawField(fp, L.grid.week_worked, 'WeekWorked: ' + (weekWorked || ''));
-
-        // Draw employee rows
-        let ey = L.grid.row_start_y;
         const G = L.grid;
         const gridColor = hexToRgb(G.color || '#504A4A');
         const refColor = hexToRgb(G.reference.color || '#999999');
+        const wwCfg = G.week_worked;
+        const wwColor = hexToRgb(wwCfg.color || G.color || '#504A4A');
+        let ey = flowTop;
 
-        pageRows.forEach(function(row) {
+        pageRows.forEach(function(it) {
+          if (it.type === 'heading') {
+            fp.drawText('WeekWorked: ' + (it.week || ''), { x: wwCfg.x, y: ey, size: wwCfg.fontSize, font: getFont(wwCfg.font), color: wwColor });
+            ey -= it.height;
+            return;
+          }
+          const row = it;
           const emp = row.emp;
           var empFont = getFont(G.font);
           var refFont = getFont(G.reference.font);
