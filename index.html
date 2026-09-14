@@ -1905,7 +1905,6 @@ function renderCards() {
           ${fld(i,'job_code','Job Code',inv.job_code,cf.job_code)}
           ${fld(i,'week_ending','Week Ending',inv.week_ending)}
           ${fld(i,'assignment','Assignment',inv.assignment||'Payroll')}
-          ${fld(i,'client_number','Client #',inv.client_number)}
         </div>
         <div class="fg" style="margin-top:8px">
           ${fld(i,'hours','Hours',inv.hours,cf.hours)}
@@ -1914,7 +1913,6 @@ function renderCards() {
           ${fld(i,'line_total','Line Total ($)',inv.line_total,cf.line_total)}
           ${fld(i,'invoice_no','Invoice No.',inv.invoice_no)}
           ${fld(i,'invoice_date','Invoice Date',inv.invoice_date)}
-          ${fld(i,'account_no','Account No.',inv.account_no)}
         </div>
         <div class="fg" style="margin-top:8px">
           ${fld(i,'attn_to','Attn To',inv.attn_to)}
@@ -2804,9 +2802,9 @@ async function doConsolidate() {
           let curY = L.timesheet.title.y - 15;
           for (let ei = 0; ei < 2 && (tpi + ei) < emps.length; ei++) {
             const emp = emps[tpi + ei];
-            const empNum = emp.client_number || ciNum || '';
-            const tsClientName = empNum ? ciName + ' #' + empNum.replace(/^#/, '') : ciName;
-            curY = drawTimesheetGrid(tp, emp, curY, tsClientName);
+            // Client # is intentionally omitted from the timesheet client name — this client's
+            // final invoices exclude the Client #/Account # fields (client request 2026-09).
+            curY = drawTimesheetGrid(tp, emp, curY, ciName);
             curY -= 20;
           }
 
