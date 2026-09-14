@@ -982,6 +982,9 @@ body {
         <div><label>Address Line 1</label><input id="ci_addr1" oninput="setClientField('client_addr1',this.value)" placeholder="22 CORTLANDT STREET"></div>
         <div><label>City / State / ZIP</label><input id="ci_city" oninput="setClientField('client_city',this.value)" placeholder="New York, NY 10007"></div>
       </div>
+      <div class="fg" style="margin-top:8px">
+        <div style="flex:1 1 100%"><label>Split weeks at month boundary (week-ending dates, comma-separated)</label><input id="splitWeeks" placeholder="e.g. 9/6/2026  — June/July fiscal split is automatic"></div>
+      </div>
     </div>
     <div id="cards"></div>
     <button class="add-inv-btn" onclick="addBlankInvoice()">+ Add Invoice Manually</button>
@@ -1212,30 +1215,49 @@ function parseWeekEnding(we) {
 function dayDate(weDate, di) {
   const d = new Date(weDate); d.setDate(d.getDate() - (6 - di)); return d;
 }
-// Fiscal year (labelled by ending year) for a date, fiscal year = Jul 1 .. Jun 30.
-function fiscalYearOf(date) {
-  return (date.getMonth() + 1) >= 7 ? date.getFullYear() + 1 : date.getFullYear();
+// Last calendar day of a date's month; simple M/D/YYYY formatter.
+function lastDayOfMonth(d) { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
+function fmtDate(d) { return (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear(); }
+
+// "Cut" dates divide work into separate invoices. We always split at each fiscal-year end
+// (Jun 30 -> Jul 1); additionally, the user can split any chosen week at the month boundary
+// inside it (e.g. week ending 9/6 -> split at Aug 31).
+function buildSplitCuts(manualWeekEndings) {
+  const cuts = [];
+  for (let y = 2020; y <= 2035; y++) cuts.push(new Date(y, 5, 30)); // Jun 30 = fiscal year end
+  (manualWeekEndings || []).forEach(we => {
+    const s = parseWeekEnding(we); if (!s) return;
+    const start = new Date(s); start.setDate(start.getDate() - 6); // Monday of that week
+    if (start.getMonth() !== s.getMonth()) cuts.push(lastDayOfMonth(start)); // month boundary inside the week
+  });
+  const seen = new Set(), out = [];
+  cuts.sort((a, b) => a - b).forEach(c => { if (!seen.has(c.getTime())) { seen.add(c.getTime()); out.push(c); } });
+  return out;
 }
-// Split one employee entry into per-fiscal-year entries when its work week straddles
-// Jun 30 / Jul 1. Returns [entry] unchanged (with a _fy tag) when it doesn't straddle,
-// so every non-boundary week behaves exactly as before.
-function splitEntryByFiscalYear(emp) {
+// Billing-period index = number of cut dates strictly before this date.
+function periodIndexOf(date, cuts) { let n = 0; for (const c of cuts) if (date.getTime() > c.getTime()) n++; return n; }
+
+// Split an employee entry into per-billing-period entries when its work days straddle a cut.
+// Earlier pieces are re-labelled with the last day of their month; the final piece keeps the
+// source week ending. No straddle -> returned unchanged, tagged with its period index (_pi).
+function splitEntryByPeriod(emp, cuts) {
   const weDate = parseWeekEnding(emp.week_ending);
   const grid = Array.isArray(emp.tsGrid) ? emp.tsGrid : null;
-  if (!weDate || !grid || !grid.length) return [{ ...emp, _fy: null }];
+  if (!weDate) return [{ ...emp, _pi: 0 }];
+  if (!grid || !grid.length) return [{ ...emp, _pi: periodIndexOf(weDate, cuts) }];
   const dayHrs = di => (parseFloat(grid[di].reg) || 0) + (parseFloat(grid[di].ot) || 0) + (parseFloat(grid[di].dt) || 0);
-  const dayFy = grid.map((_, di) => dayHrs(di) > 0 ? fiscalYearOf(dayDate(weDate, di)) : null);
-  const fys = [...new Set(dayFy.filter(v => v != null))].sort((a, b) => a - b);
-  if (fys.length <= 1) return [{ ...emp, _fy: fys[0] != null ? fys[0] : fiscalYearOf(weDate) }];
-  // Straddles the fiscal boundary — one entry per fiscal year, each carrying only its own days.
+  const dayPI = grid.map((_, di) => dayHrs(di) > 0 ? periodIndexOf(dayDate(weDate, di), cuts) : null);
+  const pis = [...new Set(dayPI.filter(v => v != null))].sort((a, b) => a - b);
+  if (pis.length <= 1) return [{ ...emp, _pi: pis.length ? pis[0] : periodIndexOf(weDate, cuts) }];
   const rate = parseFloat(emp.bill_rate) || 0;
-  return fys.map(fy => {
-    const g = grid.map((day, di) => dayFy[di] === fy
-      ? { ...day }
-      : { start: '', end: '', lunch: '', reg: 0, ot: 0, dt: 0 });
+  const maxPI = pis[pis.length - 1];
+  return pis.map(pi => {
+    const g = grid.map((day, di) => dayPI[di] === pi ? { ...day } : { start: '', end: '', lunch: '', reg: 0, ot: 0, dt: 0 });
     const hrs = g.reduce((s, d) => s + (parseFloat(d.reg) || 0) + (parseFloat(d.ot) || 0) + (parseFloat(d.dt) || 0), 0);
     const lt = (hrs * rate).toFixed(2);
-    return { ...emp, tsGrid: g, hours: hrs.toFixed(2), hours_display: hrs.toFixed(2), line_total: lt, line_total_display: lt, _fy: fy };
+    let wk = emp.week_ending;
+    if (pi !== maxPI) { const di = dayPI.findIndex(v => v === pi); wk = fmtDate(lastDayOfMonth(dayDate(weDate, di))); }
+    return { ...emp, tsGrid: g, hours: hrs.toFixed(2), hours_display: hrs.toFixed(2), line_total: lt, line_total_display: lt, week_ending: wk, _pi: pi };
   });
 }
 
@@ -1640,24 +1662,10 @@ async function startParsing() {
       return normName(n).split(',')[1]?.trim().split(' ')[0] || '';
     }
 
-    // Deduplicate: remove exact duplicates (same name + job_code + week_ending)
-    const seen = new Map();
-    const dupeIndices = [];
-    invoices.forEach((inv, idx) => {
-      const key = `${normName(inv.employee_name)}|${(inv.job_code||'').trim()}|${(inv.week_ending||'').trim()}`;
-      if (seen.has(key)) dupeIndices.push(idx);
-      else seen.set(key, true);
-    });
-    if (dupeIndices.length > 0) {
-      const dupeNames = [...new Set(dupeIndices.map(i => invoices[i].employee_name || 'unknown'))];
-      for (let di = dupeIndices.length - 1; di >= 0; di--) {
-        invoices.splice(dupeIndices[di], 1);
-      }
-      showAlert(`Removed ${dupeIndices.length} duplicate(s): ${dupeNames.join(', ')}`, 'warn');
-    }
-
-    // Step 3: Match timesheets to invoices by employee name
-    // Track which invoices already have a timesheet to avoid double-assignment
+    // Step 3: Match timesheets to invoices by employee name — done BEFORE de-duplication
+    // so two identical face rows for one person (e.g. both showing the current week, with the
+    // real June/July split only visible on their timesheets) each claim their own timesheet
+    // and adopt that timesheet's week ending. De-dup then keeps them because the weeks differ.
     const assignedInvoices = new Set();
 
     allTimesheets.forEach(ts => {
@@ -1721,11 +1729,31 @@ async function startParsing() {
         assignedInvoices.add(bestMatch.id);
         bestMatch.tsPages.push(ts.pageIdx);
         bestMatch.tsGrid = ts.tsGrid;
+        // The timesheet is authoritative for the actual work week \u2014 adopt its week ending so
+        // a face row that generically showed the current week is corrected to its real period.
+        if (ts.week_ending && parseWeekEnding(ts.week_ending)) bestMatch.week_ending = ts.week_ending;
         console.log(`  Matched timesheet "${ts.employee_name}" \u2192 invoice "${bestMatch.employee_name}" (score:${bestScore})`);
       } else {
         console.log(`  \u26A0\uFE0F UNMATCHED timesheet: "${ts.employee_name}" \u2014 ${bestMatch ? 'best score ' + bestScore + ' below threshold 80' : 'no invoice found'}`);
       }
     });
+
+    // De-duplicate AFTER matching: remove exact duplicates (same name + job_code + week_ending).
+    // Rows that adopted distinct timesheet weeks above are no longer duplicates and are kept.
+    {
+      const seen = new Map();
+      const dupeIndices = [];
+      invoices.forEach((inv, idx) => {
+        const key = `${normName(inv.employee_name)}|${(inv.job_code||'').trim()}|${(inv.week_ending||'').trim()}`;
+        if (seen.has(key)) dupeIndices.push(idx);
+        else seen.set(key, true);
+      });
+      if (dupeIndices.length > 0) {
+        const dupeNames = [...new Set(dupeIndices.map(i => invoices[i].employee_name || 'unknown'))];
+        for (let di = dupeIndices.length - 1; di >= 0; di--) invoices.splice(dupeIndices[di], 1);
+        showAlert(`Removed ${dupeIndices.length} duplicate(s): ${dupeNames.join(', ')}`, 'warn');
+      }
+    }
 
     document.getElementById('progFill').style.width = '100%';
 
@@ -2300,23 +2328,31 @@ async function doConsolidate() {
   document.getElementById('spinDetail').textContent = '';
 
   try {
-    // Group by job code
-    // Fiscal-year split: when a work week straddles Jun 30 / Jul 1, an employee's
-    // hours are split into separate entries per fiscal year. Non-straddling weeks
-    // are returned unchanged, so this is a no-op except at the fiscal boundary.
-    const fiscalEntries = [];
-    invoices.forEach(inv => { splitEntryByFiscalYear(inv).forEach(e => fiscalEntries.push(e)); });
+    // Billing-period split: always split at each fiscal-year end (Jun 30 / Jul 1); also split
+    // any user-chosen weeks at the month boundary inside them. An employee whose work straddles
+    // a cut is split into separate entries per period; non-straddling weeks pass through, so
+    // this is a no-op unless a boundary applies.
+    const manualSplitWeeks = (document.getElementById('splitWeeks')?.value || '')
+      .split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+    const splitCuts = buildSplitCuts(manualSplitWeeks);
+    const periodEntries = [];
+    invoices.forEach(inv => { splitEntryByPeriod(inv, splitCuts).forEach(e => periodEntries.push(e)); });
 
-    // Group by job code, then by fiscal year (so a straddling code -> two files).
+    // Group by job code, then by billing period (so a split code -> multiple files).
     const groups = {};
-    fiscalEntries.forEach(inv => {
-      const key = inv.job_code + '||' + inv._fy;
+    periodEntries.forEach(inv => {
+      const key = inv.job_code + '||' + inv._pi;
       if (!groups[key]) groups[key] = [];
       groups[key].push(inv);
     });
-    // Which job codes actually split across >1 fiscal year (their files need a period suffix).
-    const fyByCode = {};
-    fiscalEntries.forEach(inv => { (fyByCode[inv.job_code] = fyByCode[inv.job_code] || new Set()).add(inv._fy); });
+    // Per job code, the sorted list of period indexes present — used to rank split invoices
+    // (earliest keeps the plain number; later ones get an "A", "B", … suffix).
+    const periodsByCode = {};
+    periodEntries.forEach(inv => { (periodsByCode[inv.job_code] = periodsByCode[inv.job_code] || new Set()).add(inv._pi); });
+    const rankByCodePeriod = {};
+    Object.keys(periodsByCode).forEach(c => {
+      [...periodsByCode[c]].sort((a, b) => a - b).forEach((pi, rank) => { rankByCodePeriod[c + '||' + pi] = rank; });
+    });
 
     // Client info from panel
     const ciName = document.getElementById('ci_name').value || invoices[0]?.client_name || '';
@@ -2335,13 +2371,13 @@ async function doConsolidate() {
 
     for (let ci = 0; ci < groupKeys.length; ci++) {
       const emps = groups[groupKeys[ci]];
-      const code = emps[0].job_code;           // real job code (key also encodes fiscal year)
-      // Only files for a code that split across the fiscal boundary get a period label.
-      let periodSuffix = '';
-      if (fyByCode[code] && fyByCode[code].size > 1) {
-        const fy = emps[0]._fy, minFy = Math.min(...fyByCode[code]);
-        periodSuffix = (fy === minFy) ? '(thru 6-30-' + fy + ')' : '(from 7-1-' + (fy - 1) + ')';
-      }
+      const code = emps[0].job_code;           // real job code (key also encodes the period)
+      // When a code is split into multiple invoices, the earliest period keeps the plain
+      // invoice number and later periods get an "A"/"B"/… suffix (client convention).
+      const isSplit = (periodsByCode[code] && periodsByCode[code].size > 1);
+      const rank = rankByCodePeriod[code + '||' + emps[0]._pi] || 0;
+      const invSuffix = (isSplit && rank > 0) ? String.fromCharCode(64 + rank) : ''; // 1->A, 2->B
+      const isFinalPeriod = (rank === periodsByCode[code].size - 1);
       document.getElementById('progFill').style.width = Math.round(((ci + 1) / groupKeys.length) * 90) + '%';
       document.getElementById('spinDetail').textContent = `Building ${code} (${emps.length} employee${emps.length!==1?'s':''})...`;
 
@@ -2575,22 +2611,28 @@ async function doConsolidate() {
         for (const e of emps) { if (e[field]) return e[field]; }
         return '';
       }
-      const invoiceNo = firstVal('invoice_no');
+      // Invoice number carries the split suffix (e.g. 1067694 -> 1067694A) on the invoice and filename.
+      const invoiceNo = firstVal('invoice_no') + invSuffix;
       const invoiceNos = [...new Set(emps.map(e => e.invoice_no).filter(Boolean))];
       if (invoiceNos.length > 1) {
         console.warn(`Job code ${code} has conflicting invoice numbers: ${invoiceNos.join(', ')} — using ${invoiceNo}`);
       }
       const accountNo = firstVal('account_no');
       const invoiceDate = firstVal('invoice_date');
-      // An invoice may hold more than one week. Order employees chronologically by
-      // week ending, and label the invoice with the LATEST (current) week.
+      // An invoice may hold more than one week. Order employees chronologically by week ending.
       emps.sort(function(a, b) {
         const da = parseWeekEnding(a.week_ending), db = parseWeekEnding(b.week_ending);
         return (da ? da.getTime() : 0) - (db ? db.getTime() : 0);
       });
+      // Week label: the LATEST week normally; but an earlier split period is always labelled
+      // with the last day of its month (e.g. the June half of a Jun/Jul split reads 6/30).
       let weekWorked = firstVal('week_ending');
       { let latest = -Infinity;
         emps.forEach(function(e) { const d = parseWeekEnding(e.week_ending); if (d && d.getTime() >= latest) { latest = d.getTime(); weekWorked = e.week_ending; } });
+      }
+      if (isSplit && !isFinalPeriod) {
+        const wd = parseWeekEnding(weekWorked);
+        if (wd) weekWorked = fmtDate(lastDayOfMonth(wd));
       }
 
       // Reference lines wrap within the employee-name column, matching Kalyn's
@@ -2776,7 +2818,7 @@ async function doConsolidate() {
       }
 
       const pdfData = await pdfDoc.save();
-      zip.file(invoicePdfName(invoiceNo, code, weekWorked, periodSuffix), pdfData);
+      zip.file(invoicePdfName(invoiceNo, code, weekWorked), pdfData);
       results.push({
         code,
         invoiceNo,
