@@ -638,6 +638,65 @@ body {
   border-left: 3px solid var(--g)
 }
 
+/* Collapsible: the header stays visible so the feature is still findable, and an
+   active request is advertised by the badge even while the body is collapsed. */
+.split-h {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none
+}
+
+.split-h h3 {
+  margin: 0
+}
+
+.split-h .exp {
+  font-size: 11px;
+  color: var(--tm);
+  transition: .2s
+}
+
+.split-panel.open .split-h .exp {
+  transform: rotate(90deg)
+}
+
+.split-sub {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--tm)
+}
+
+.split-badge {
+  display: none;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--g);
+  border-radius: 10px;
+  padding: 2px 8px;
+  white-space: nowrap
+}
+
+.split-panel.has-split .split-badge {
+  display: inline-block
+}
+
+/* Outranks `.client-panel .fg`, which also matches this element. */
+.client-panel.split-panel .split-b {
+  display: none;
+  margin-top: 14px
+}
+
+.client-panel.split-panel.open .split-b {
+  display: grid
+}
+
+@media (max-width: 600px) {
+  .split-sub { display: none }
+}
+
 .split-input {
   max-width: 340px
 }
@@ -989,12 +1048,19 @@ body {
         <div><label>City / State / ZIP</label><input id="ci_city" oninput="setClientField('client_city',this.value)" placeholder="New York, NY 10007"></div>
       </div>
     </div>
-    <div class="client-panel split-panel">
-      <h3>Split Invoices — special requests</h3>
-      <div class="fg">
+    <div class="client-panel split-panel" id="splitPanel">
+      <div class="split-h" role="button" tabindex="0" aria-expanded="false" aria-controls="splitBody"
+           onclick="toggleSplitPanel()"
+           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleSplitPanel()}">
+        <span class="exp">&#9654;</span>
+        <h3>Split Invoices — special requests</h3>
+        <span class="split-badge" id="splitBadge"></span>
+        <span class="split-sub">Rarely needed — June/July splits on its own</span>
+      </div>
+      <div class="fg split-b" id="splitBody">
         <div style="grid-column:1/-1">
           <label>Split a week into two invoices at the month boundary</label>
-          <input id="splitWeeks" class="split-input" placeholder="e.g.   9/6/2026 B1110014">
+          <input id="splitWeeks" class="split-input" placeholder="e.g.   9/6/2026 B1110014" oninput="refreshSplitBadge()">
           <div class="split-help">
             Enter the <strong>week-ending date</strong> of the week you need split. Hours worked before
             the month boundary stay on the original invoice number, under a week ending on the last day
@@ -1392,6 +1458,7 @@ function restoreState(state) {
     document.getElementById('ci_addr1').value = state.client.addr1 || '';
     document.getElementById('ci_city').value = state.client.city || '';
     document.getElementById('splitWeeks').value = state.client.splitWeeks || '';
+    refreshSplitBadge(true); // expand if this session already had a split request pending
   }
 }
 // Check for saved session on load
@@ -1978,6 +2045,30 @@ function toggleCard(i) {
   card.classList.toggle('open');
   const hdr = card.querySelector('.card-h');
   if (hdr) hdr.setAttribute('aria-expanded', card.classList.contains('open'));
+}
+
+// Split panel is collapsed by default — it is a rare, special-request feature. Pass true/false
+// to force a state, or nothing to toggle.
+function toggleSplitPanel(force) {
+  const p = document.getElementById('splitPanel');
+  if (!p) return;
+  const open = (force === undefined) ? !p.classList.contains('open') : !!force;
+  p.classList.toggle('open', open);
+  p.querySelector('.split-h')?.setAttribute('aria-expanded', String(open));
+}
+
+// Show how many split requests are pending on the collapsed header, so a split can never be
+// active without it being visible. autoOpen expands the panel when one is already set (e.g. a
+// restored session), so a pending split is never hidden behind a collapsed header.
+function refreshSplitBadge(autoOpen) {
+  const p = document.getElementById('splitPanel');
+  if (!p) return;
+  const n = (document.getElementById('splitWeeks')?.value || '')
+    .split(/[\n,]+/).map(s => s.trim()).filter(Boolean).length;
+  p.classList.toggle('has-split', n > 0);
+  const b = document.getElementById('splitBadge');
+  if (b) b.textContent = n ? n + (n === 1 ? ' request' : ' requests') : '';
+  if (autoOpen && n > 0) toggleSplitPanel(true);
 }
 
 function fld(i, key, label, val, conf) {
