@@ -195,27 +195,6 @@ body {
   color: var(--r)
 }
 
-.we-row {
-  max-width: 560px;
-  margin: 24px auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px
-}
-
-.we-row label {
-  font-size: 14px;
-  font-weight: 500
-}
-
-.we-row input[type=date] {
-  padding: 8px 12px;
-  border: 1px solid var(--b);
-  border-radius: 6px;
-  font-size: 14px
-}
-
 .btn {
   display: inline-flex;
   align-items: center;
@@ -969,10 +948,6 @@ body {
         <div class="dz-hint">Scanned batch invoices (e.g. CCE02152026_0002.pdf)</div>
       </div>
       <div class="chips" id="chips"></div>
-      <div class="we-row" id="weRow" style="display:none">
-        <label for="we">Week Ending:</label>
-        <input type="date" id="we">
-      </div>
       <div style="margin-top:24px">
         <button class="btn btn-p" id="parseBtn" disabled onclick="startParsing()">Parse Invoices</button>
       </div>
@@ -1153,14 +1128,6 @@ let currentLBPage = -1; // lightbox navigation state
 let saveTimer = null; // debounce timer for localStorage
 
 // Default week ending to most recent Friday
-function getLastFriday() {
-  const d = new Date();
-  const day = d.getDay(); // 0=Sun,1=Mon,...5=Fri,6=Sat
-  const diff = day >= 5 ? day - 5 : day + 2; // days since last Friday
-  d.setDate(d.getDate() - diff);
-  return d.toISOString().split('T')[0];
-}
-document.getElementById('we').value = getLastFriday();
 
 // Upload handling
 const dz = document.getElementById('dz'),
@@ -1202,7 +1169,6 @@ function removeFile(i) {
 function renderChips() {
   document.getElementById('chips').innerHTML = uploadedFiles.map((f, i) => `<div class="chip">\u{1F4C4} ${f.name} <span class="rm" onclick="removeFile(${i})">\u00D7</span></div>`).join('');
   document.getElementById('parseBtn').disabled = !uploadedFiles.length;
-  document.getElementById('weRow').style.display = uploadedFiles.length ? 'flex' : 'none';
 }
 
 // UI helpers
@@ -1258,6 +1224,30 @@ function parseWeekEnding(we) {
   let y = parseInt(m[3], 10); if (y < 100) y += 2000;
   return new Date(y, parseInt(m[1], 10) - 1, parseInt(m[2], 10));
 }
+// The week this batch belongs to, derived from the invoices actually extracted: the most
+// common week ending, ties broken by the later date. '' when nothing usable was extracted.
+// Used to fill a missing week ending and to name downloads — there is no manual week picker.
+function batchWeekEnding() {
+  const counts = new Map();
+  invoices.forEach(inv => {
+    const k = String(inv.week_ending || '').trim();
+    if (parseWeekEnding(k)) counts.set(k, (counts.get(k) || 0) + 1);
+  });
+  let best = '', bestN = 0, bestT = -Infinity;
+  counts.forEach((n, k) => {
+    const t = parseWeekEnding(k).getTime();
+    if (n > bestN || (n === bestN && t > bestT)) { best = k; bestN = n; bestT = t; }
+  });
+  return best;
+}
+// Batch week as YYYY-MM-DD for download filenames; '' when unknown.
+function batchWeekSlug() {
+  const d = parseWeekEnding(batchWeekEnding());
+  if (!d) return '';
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+
 // Calendar date of grid day di (0=Mon..6=Sun; Sun == week ending) for a given week ending date.
 function dayDate(weDate, di) {
   const d = new Date(weDate); d.setDate(d.getDate() - (6 - di)); return d;
@@ -1356,7 +1346,6 @@ function saveState() {
           city: document.getElementById('ci_city')?.value || '',
           splitWeeks: document.getElementById('splitWeeks')?.value || ''
         },
-        weekEnding: document.getElementById('we')?.value || '',
         savedAt: Date.now()
       };
       localStorage.setItem('talenthub_state', JSON.stringify(state));
@@ -1394,7 +1383,6 @@ function restoreState(state) {
     if (!inv.tsGrid) inv.tsGrid = null;
   });
   pageImages = []; // thumbnails not available after restore
-  if (state.weekEnding) document.getElementById('we').value = state.weekEnding;
   showReview();
   showAlert('Session restored. Page thumbnails are unavailable \u2014 re-upload PDFs if you need to view original pages.', 'ok');
   // Restore client panel after render
@@ -1490,14 +1478,6 @@ async function startParsing() {
       pageImages.push(canvas.toDataURL('image/jpeg', 0.85));
     }
 
-    // Get week ending from date picker
-    const we = document.getElementById('we').value;
-    let weFmt = '';
-    if (we) {
-      const p = we.split('-');
-      weFmt = p[1] + '/' + p[2] + '/' + p[0];
-    }
-
     // Classify + extract all pages with concurrent API calls
     document.getElementById('spinMsg').textContent = 'Analyzing pages with AI...';
     document.getElementById('progFill').style.width = '30%';
@@ -1508,7 +1488,7 @@ async function startParsing() {
 
     async function analyzeWithProgress(idx) {
       const imgData = pageImages[idx].split(',')[1];
-      const result = await analyzePageAPI(imgData, idx + 1, allPages[idx].fileName, weFmt);
+      const result = await analyzePageAPI(imgData, idx + 1, allPages[idx].fileName);
       pageResults[idx] = result;
       completed++;
       document.getElementById('spinDetail').textContent = `Analyzed ${completed} of ${totalPages} pages...`;
@@ -1609,7 +1589,7 @@ async function startParsing() {
             client_city: r.client_city || '',
             // Per-employee week first (an employee can appear under multiple WeekWorked
             // headings), then the page-level week, then the picker value.
-            week_ending: emp.week_ending || r.week_ending || weFmt,
+            week_ending: emp.week_ending || r.week_ending || '',
             // Employee-level fields
             employee_name: empName,
             job_title: emp.job_title || emp.title || '',
@@ -1831,11 +1811,12 @@ async function startParsing() {
       return;
     }
 
-    // Fill in week ending for any still missing
-    if (weFmt) {
-      invoices.forEach(inv => {
-        if (!inv.week_ending) inv.week_ending = weFmt
-      });
+    // Fill in the week ending for any invoice the scan didn't yield one for, using the week
+    // the rest of the batch belongs to. With nothing to infer from it stays blank and is
+    // flagged in the OCR notice, to be corrected per-invoice in review.
+    {
+      const fallbackWeek = batchWeekEnding();
+      if (fallbackWeek) invoices.forEach(inv => { if (!inv.week_ending) inv.week_ending = fallbackWeek; });
     }
 
     showReview();
@@ -2327,7 +2308,7 @@ function exportCSV() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `TalentHub_Export_${document.getElementById('we').value||'data'}.csv`;
+  a.download = `TalentHub_Export_${batchWeekSlug() || 'data'}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -2356,7 +2337,7 @@ function exportJSON() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `TalentHub_Export_${document.getElementById('we').value||'data'}.json`;
+  a.download = `TalentHub_Export_${batchWeekSlug() || 'data'}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -2920,7 +2901,7 @@ function doDownload() {
   const url = URL.createObjectURL(zipBlob);
   const a = document.createElement('a');
   a.href = url;
-  const we = document.getElementById('we').value || 'invoices';
+  const we = batchWeekSlug() || 'invoices';
   a.download = `Consolidated_Invoices_WE_${we}.zip`;
   a.click();
   URL.revokeObjectURL(url);

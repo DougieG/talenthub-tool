@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Missing image data" });
   }
 
-  const { page_num, file_name, week_ending } = body;
+  const { page_num, file_name } = body;
 
   const systemPrompt = `You are an invoice data extraction assistant for TalentHub Workforce Inc., a staffing agency.
 You extract structured data from scanned invoice pages.
@@ -162,7 +162,7 @@ CRITICAL - Numeric values: Return ALL numeric values (hours, bill_rate, pay_rate
 
 Confidence: "high" if clearly legible, "low" if uncertain or inferred.
 Missing text fields: use null. Missing numeric fields: use 0.
-If week_ending not found, use: "${week_ending || ""}".`;
+If a week ending cannot be read from the page, use null — never guess one.`;
 
   try {
     const createParams = {
