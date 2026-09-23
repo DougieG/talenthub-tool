@@ -655,6 +655,38 @@ body {
   margin-bottom: 3px
 }
 
+.split-panel {
+  border-left: 3px solid var(--g)
+}
+
+.split-input {
+  max-width: 340px
+}
+
+.split-help {
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--tm);
+  margin-top: 8px;
+  max-width: 760px
+}
+
+.split-help code {
+  background: var(--gb);
+  border: 1px solid var(--b);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 11px
+}
+
+.split-eg {
+  margin: 7px 0;
+  padding: 7px 10px;
+  background: var(--gb);
+  border: 1px solid var(--gl);
+  border-radius: 6px
+}
+
 .ts-grid-wrap {
   margin-top: 14px
 }
@@ -977,13 +1009,28 @@ body {
       <h3>Client Info — applies to all invoices</h3>
       <div class="fg">
         <div><label>Client Name</label><input id="ci_name" oninput="setClientField('client_name',this.value)" placeholder="FUND FOR PUBLIC HEALTH"></div>
-        <div><label>Client Number</label><input id="ci_num" oninput="setClientField('client_number',this.value)" placeholder="e.g. 30%"></div>
         <div><label>Attn To</label><input id="ci_attn" oninput="setClientField('attn_to',this.value)" placeholder="Attn To:"></div>
         <div><label>Address Line 1</label><input id="ci_addr1" oninput="setClientField('client_addr1',this.value)" placeholder="22 CORTLANDT STREET"></div>
         <div><label>City / State / ZIP</label><input id="ci_city" oninput="setClientField('client_city',this.value)" placeholder="New York, NY 10007"></div>
       </div>
-      <div class="fg" style="margin-top:8px">
-        <div style="flex:1 1 100%"><label>Split weeks at month boundary (week-ending dates, comma-separated)</label><input id="splitWeeks" placeholder="e.g. 9/6/2026  — June/July fiscal split is automatic"></div>
+    </div>
+    <div class="client-panel split-panel">
+      <h3>Split Invoices — special requests</h3>
+      <div class="fg">
+        <div style="grid-column:1/-1">
+          <label>Split a week into two invoices at the month boundary</label>
+          <input id="splitWeeks" class="split-input" placeholder="e.g.   9/6/2026 B1110014">
+          <div class="split-help">
+            Enter the <strong>week-ending date</strong> of the week you need split. Hours worked before
+            the month boundary stay on the original invoice number, under a week ending on the last day
+            of that month. Hours from the 1st onward go onto a second invoice with an
+            <strong>&ldquo;A&rdquo;</strong> added to the invoice number.
+            <div class="split-eg">9/6/2026 B1110014 &nbsp;&rarr;&nbsp; <code>1068567, B1110014 8.31.pdf</code> (Aug) + <code>1068567A, B1110014 9.6.pdf</code> (Sep)</div>
+            Add a job code after the date to split <em>only</em> that code. Leave the code off to split
+            every code that week. Separate multiple requests with commas.
+            <br><strong>June / July needs no entry</strong> &mdash; the fiscal-year split always happens automatically.
+          </div>
+        </div>
       </div>
     </div>
     <div id="cards"></div>
@@ -1217,21 +1264,42 @@ function dayDate(weDate, di) {
 }
 // Last calendar day of a date's month; simple M/D/YYYY formatter.
 function lastDayOfMonth(d) { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
-function fmtDate(d) { return (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear(); }
+// MM/DD/YYYY — zero-padded to match the week-ending format used everywhere else on the
+// invoice (filenames go through shortDate(), which parseInts, so padding is safe there).
+function fmtDate(d) {
+  const p = n => String(n).padStart(2, '0');
+  return p(d.getMonth() + 1) + '/' + p(d.getDate()) + '/' + d.getFullYear();
+}
 
 // "Cut" dates divide work into separate invoices. We always split at each fiscal-year end
 // (Jun 30 -> Jul 1); additionally, the user can split any chosen week at the month boundary
 // inside it (e.g. week ending 9/6 -> split at Aug 31).
-function buildSplitCuts(manualWeekEndings) {
-  const cuts = [];
-  for (let y = 2020; y <= 2035; y++) cuts.push(new Date(y, 5, 30)); // Jun 30 = fiscal year end
-  (manualWeekEndings || []).forEach(we => {
-    const s = parseWeekEnding(we); if (!s) return;
+function normCode(c) { return String(c || '').trim().toUpperCase(); }
+
+// A split rule pairs a cut date with the job code it applies to (null = every code).
+// Each manual entry is "<week ending>" or "<week ending> <job code>", in either order.
+function buildSplitRules(manualEntries) {
+  const rules = [];
+  for (let y = 2020; y <= 2035; y++) rules.push({ date: new Date(y, 5, 30), code: null }); // fiscal year end
+  (manualEntries || []).forEach(entry => {
+    const parts = String(entry).trim().split(/\s+/).filter(Boolean);
+    const dateTok = parts.find(p => parseWeekEnding(p));
+    if (!dateTok) return;
+    const code = normCode(parts.filter(p => p !== dateTok).join(' ')) || null;
+    const s = parseWeekEnding(dateTok);
     const start = new Date(s); start.setDate(start.getDate() - 6); // Monday of that week
-    if (start.getMonth() !== s.getMonth()) cuts.push(lastDayOfMonth(start)); // month boundary inside the week
+    if (start.getMonth() !== s.getMonth()) rules.push({ date: lastDayOfMonth(start), code }); // month boundary inside the week
   });
+  return rules;
+}
+// The cut dates that apply to one job code — the always-on fiscal cuts plus any rule
+// scoped to this code — de-duplicated and sorted.
+function cutsForCode(jobCode, rules) {
+  const jc = normCode(jobCode);
   const seen = new Set(), out = [];
-  cuts.sort((a, b) => a - b).forEach(c => { if (!seen.has(c.getTime())) { seen.add(c.getTime()); out.push(c); } });
+  (rules || []).filter(r => !r.code || r.code === jc)
+    .map(r => r.date).sort((a, b) => a - b)
+    .forEach(d => { if (!seen.has(d.getTime())) { seen.add(d.getTime()); out.push(d); } });
   return out;
 }
 // Billing-period index = number of cut dates strictly before this date.
@@ -1283,10 +1351,10 @@ function saveState() {
         }),
         client: {
           name: document.getElementById('ci_name')?.value || '',
-          num: document.getElementById('ci_num')?.value || '',
           attn: document.getElementById('ci_attn')?.value || '',
           addr1: document.getElementById('ci_addr1')?.value || '',
-          city: document.getElementById('ci_city')?.value || ''
+          city: document.getElementById('ci_city')?.value || '',
+          splitWeeks: document.getElementById('splitWeeks')?.value || ''
         },
         weekEnding: document.getElementById('we')?.value || '',
         savedAt: Date.now()
@@ -1332,10 +1400,10 @@ function restoreState(state) {
   // Restore client panel after render
   if (state.client) {
     document.getElementById('ci_name').value = state.client.name || '';
-    document.getElementById('ci_num').value = state.client.num || '';
     document.getElementById('ci_attn').value = state.client.attn || '';
     document.getElementById('ci_addr1').value = state.client.addr1 || '';
     document.getElementById('ci_city').value = state.client.city || '';
+    document.getElementById('splitWeeks').value = state.client.splitWeeks || '';
   }
 }
 // Check for saved session on load
@@ -2069,7 +2137,6 @@ function setClientField(key, val) {
 function populateClientPanel() {
   const first = invoices[0] || {};
   document.getElementById('ci_name').value = first.client_name || '';
-  document.getElementById('ci_num').value = first.client_number || '';
   document.getElementById('ci_attn').value = first.attn_to || '';
   // addr1 and city are not extracted by AI — only populated from saved state
   document.getElementById('ci_addr1').value = first.client_addr1 || '';
@@ -2330,11 +2397,15 @@ async function doConsolidate() {
     // any user-chosen weeks at the month boundary inside them. An employee whose work straddles
     // a cut is split into separate entries per period; non-straddling weeks pass through, so
     // this is a no-op unless a boundary applies.
-    const manualSplitWeeks = (document.getElementById('splitWeeks')?.value || '')
+    // Each entry is a week ending, optionally followed by a job code to scope the split
+    // to that code alone (e.g. "9/6/2026 B1110014").
+    const manualSplitEntries = (document.getElementById('splitWeeks')?.value || '')
       .split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
-    const splitCuts = buildSplitCuts(manualSplitWeeks);
+    const splitRules = buildSplitRules(manualSplitEntries);
     const periodEntries = [];
-    invoices.forEach(inv => { splitEntryByPeriod(inv, splitCuts).forEach(e => periodEntries.push(e)); });
+    invoices.forEach(inv => {
+      splitEntryByPeriod(inv, cutsForCode(inv.job_code, splitRules)).forEach(e => periodEntries.push(e));
+    });
 
     // Group by job code, then by billing period (so a split code -> multiple files).
     const groups = {};
@@ -2354,7 +2425,6 @@ async function doConsolidate() {
 
     // Client info from panel
     const ciName = document.getElementById('ci_name').value || invoices[0]?.client_name || '';
-    const ciNum = document.getElementById('ci_num').value || invoices[0]?.client_number || '';
     const ciAttn = document.getElementById('ci_attn').value || '';
     const ciAddr1 = document.getElementById('ci_addr1').value || invoices[0]?.client_addr1 || '';
     const ciCity = document.getElementById('ci_city').value || invoices[0]?.client_city || '';
